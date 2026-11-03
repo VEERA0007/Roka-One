@@ -9,6 +9,10 @@ on:
       - '**.md'
       - '**.txt'
 
+concurrency:
+  group: gensolar-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
