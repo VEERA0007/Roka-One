@@ -13,6 +13,10 @@ on:
       - 'tests/**'
       - '.github/workflows/cross-platform-ci.yml'
 
+concurrency:
+  group: gensolar-cross-platform-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
