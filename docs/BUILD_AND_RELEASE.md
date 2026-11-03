@@ -20,7 +20,7 @@ npm run test:web
 The static web build is generated in `web/dist`. It includes the responsive interface, CRM web shim, notification inbox, install manifest and service worker.
 
 ## Android debug APK
-The existing Android app can be built by running the **Build GenSolar APK** GitHub Actions workflow. It creates an ephemeral debug signing key unless `GENSOLAR_DEBUG_KEYSTORE_BASE64` is configured as a repository secret. An ephemeral key is suitable for test installs, not for upgrading an existing signed installation or production release distribution.
+The existing Android app can be built by running the **Build GenSolar APK** GitHub Actions workflow. It creates an ephemeral debug signing key unless `GENSOLAR_DEBUG_KEYSTORE_BASE64` is configured as a repository secret. An ephemeral key is suitable for test installs, not for upgrading an existing signed installation or production release distribution. To publish the APK as a GitHub Release, add a repository Actions secret named `GENSOLAR_RELEASE_TOKEN` with permission to create/edit releases; otherwise the APK remains available as a workflow artifact.
 
 ## iOS simulator build
 The **GenSolar Pro Cross-platform CI** workflow installs the Capacitor iOS platform and builds an iOS Simulator target on macOS. This is a simulator build only; App Store distribution requires Apple Developer signing certificates, provisioning profiles, entitlements, privacy declarations and release review.
