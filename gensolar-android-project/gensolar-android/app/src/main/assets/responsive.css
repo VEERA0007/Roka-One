@@ -72,3 +72,36 @@ img,svg,canvas{max-width:100%}
   .wl .signin{margin-top:12px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Wide-screen welcome and authentication experience */
+@media (min-width:900px){
+  .wgate{display:flex;align-items:center;justify-content:center;padding:24px}
+  .wgate .wapp{
+    --u:min(.55vw,.55vh,5px);
+    width:min(100%,1320px);max-width:1320px;
+    height:min(920px,calc(100dvh - 48px));
+    min-height:min(620px,calc(100dvh - 48px));
+    display:grid;grid-template-columns:minmax(0,1.08fr) minmax(390px,.92fr);grid-template-rows:minmax(0,1fr);
+    border-radius:22px;overflow:hidden;box-shadow:0 24px 80px rgba(2,35,25,.22);
+  }
+  .wgate .hero{grid-column:1;grid-row:1;height:100%;min-height:0;overflow:hidden}
+  .wgate .sheet{grid-column:2;grid-row:1;margin:0;min-height:0;border-radius:0;padding:clamp(26px,4vw,64px);justify-content:center;overflow-y:auto}
+  .wgate .hero .logo{width:calc(var(--u)*100)}
+  .wgate .hero .photo-bottom{width:100%}
+  .wgate .hero .photo-right{width:44%}
+  .wgate .tagline{font-size:clamp(10px,calc(var(--u)*2.2),15px)}
+  .wgate h1.abs{font-size:clamp(32px,calc(var(--u)*8.4),54px);line-height:1.08}
+  .wgate .feats{width:90%;left:5%}
+  .wgate .feat{font-size:clamp(11px,calc(var(--u)*2.7),15px)}
+  .wgate .feat svg{width:clamp(22px,calc(var(--u)*6.4),34px);height:clamp(22px,calc(var(--u)*6.4),34px)}
+  .wgate .btn{font-size:16px;min-height:52px;height:auto;padding:16px}
+  .wgate .benefits{margin-top:24px}
+  .wgate .ben{font-size:13px}
+  .wl .signin{margin-left:auto;margin-right:auto}
+}
+@media (min-width:900px) and (max-height:700px){
+  .wgate{padding:12px}
+  .wgate .wapp{height:calc(100dvh - 24px);min-height:0}
+  .wgate .sheet{padding:20px 28px}
+  .wgate .benefits{margin-top:12px}
+}
