@@ -1251,14 +1251,14 @@ function model(p){
   function addLead(l){
     var a=leads();l.id='L'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
     l.ts=Date.now();l.status=l.status||'New';l.notes=l.notes||[];l.owner=session&&(session.phone||session.uid);
-    a.unshift(l);if(!saveLeads(a))return null;cloudSaveLead(l);return l;
+    a.unshift(l);if(!saveLeads(a))return null;cloudSaveLead(l);if(window.GenSolarNotifications)window.GenSolarNotifications.notify({title:'New lead saved',body:(l.name||'Customer')+' has been added to your GenSolar records.',type:'lead'});return l;
   }
   function renderLeads(){
     var comp=isCompany();
     $('leadsTitle').textContent=comp?'Leads':'My estimates';
     $('leadsLede').textContent=comp?'Track customers from first contact to a won project.':'Estimates you saved on this phone.';
     $('addBox').hidden=!comp;$('lcExport').hidden=!comp;
-    var all=myLeads(),counts={};
+    var all=myLeads(),counts={};if(window.GenSolarNotifications)window.GenSolarNotifications.remindDue(all);
     all.forEach(function(l){counts[l.status]=(counts[l.status]||0)+1});
     var st='<div class="stat'+(filter==='all'?' on':'')+'" data-f="all" role="button" tabindex="0"><b>'+all.length+'</b><span>All</span></div>';
     if(comp)STATUSES.forEach(function(s){st+='<div class="stat'+(filter===s?' on':'')+'" data-f="'+s+'" role="button" tabindex="0"><b>'+(counts[s]||0)+'</b><span>'+s+'</span></div>'});
@@ -1284,7 +1284,7 @@ function model(p){
     var act0=e.target.getAttribute('data-act');
     if(act0==='follow'){
       var fid=e.target.closest('.ld').getAttribute('data-id'),fa=leads();
-      fa.forEach(function(l){if(l.id===fid){l.nextFollow=e.target.value;cloudSaveLead(l)}});saveLeads(fa);toast('Follow-up date saved');return;
+      var followName='Customer';fa.forEach(function(l){if(l.id===fid){l.nextFollow=e.target.value;followName=l.name||followName;cloudSaveLead(l)}});saveLeads(fa);if(e.target.value&&window.GenSolarNotifications)window.GenSolarNotifications.notify({title:'Follow-up scheduled',body:followName+' · '+e.target.value,type:'follow-up'});toast('Follow-up date saved');return;
     }
     if(act0!=='status')return;
     var id=e.target.closest('.ld').getAttribute('data-id'),a=leads();
