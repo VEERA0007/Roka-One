@@ -303,7 +303,8 @@ html,body{margin:0;height:100%;background:#fff}
 #epcRoot .g-lbl{fill:var(--ink);font:500 12px var(--font-mono)}
 #epcRoot .g-grid{stroke:var(--line);stroke-width:1}
 @media(max-width:420px){#epcRoot .grid2{gap:8px}#epcRoot .stage{font-size:13px;padding:9px 7px}}
-</style></head><body>
+</style><link rel="stylesheet" href="responsive.css">
+</head><body>
 <div id="splash"><img src="gensolar_app_icon.png" alt="GenSolar"><p>POWERING A GREENER TOMORROW</p></div><script>setTimeout(function(){var e=document.getElementById("splash");if(e){e.classList.add("out");setTimeout(function(){e.remove()},500)}},1600)</script>
 <div id="authGate" class="wgate"><main class="wapp">
   <section class="hero" aria-label="Welcome">
@@ -2392,4 +2393,5 @@ projOpts();bindInputs();
 bindInputs();renderBlocks();render();
 })();
 </script>
+<script src="notification-center.js" defer></script>
 </body></html>
