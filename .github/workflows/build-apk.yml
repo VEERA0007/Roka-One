@@ -39,9 +39,19 @@ jobs:
           test -f build.gradle
           test -f app/build.gradle
           test -f app/google-services.json
-          test -f app/debug.keystore
           test -f app/src/main/assets/index.html
           echo "Android project files found."
+
+      - name: Prepare ephemeral debug signing key
+        working-directory: ${{ env.PROJECT_DIR }}/app
+        run: |
+          if [ -n "${DEBUG_KEYSTORE_BASE64:-}" ]; then
+            echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > debug.keystore
+          else
+            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.GENSOLAR_DEBUG_KEYSTORE_BASE64 }}
 
       - name: Build debug APK
         working-directory: ${{ env.PROJECT_DIR }}
