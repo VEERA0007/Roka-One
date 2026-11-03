@@ -27,6 +27,19 @@
     window.dispatchEvent(new CustomEvent('gensolar:notification-added',{detail:n}));
     return n.id;
   }
+  function remindDue(items){
+    const now=new Date(),today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+    let sent={};try{sent=JSON.parse(localStorage.getItem('gs_followup_reminders_v1')||'{}')}catch(_){}
+    let changed=false;
+    (items||[]).forEach(l=>{
+      if(!l||!l.nextFollow||l.nextFollow>today)return;
+      const key=String(l.id||l.phone||l.name)+':'+l.nextFollow;
+      if(sent[key])return;
+      sent[key]=today;changed=true;
+      notify({title:l.nextFollow===today?'Follow-up due today':'Overdue customer follow-up',body:(l.name||'Customer')+' · scheduled '+l.nextFollow,type:'follow-up'});
+    });
+    if(changed){try{localStorage.setItem('gs_followup_reminders_v1',JSON.stringify(sent))}catch(_){}}
+  }
   function mount(){
     const head=document.querySelector('#app .ahead');
     if(head&&!document.getElementById('gsNotificationButton')){
@@ -49,7 +62,7 @@
     render();
   }
   notices=safeRead();
-  window.GenSolarNotifications={notify,open,close,markAllRead(){notices=notices.map(n=>({...n,read:true}));save()},getAll(){return notices.slice()}};
+  window.GenSolarNotifications={notify,open,close,remindDue,markAllRead(){notices=notices.map(n=>({...n,read:true}));save()},getAll(){return notices.slice()}};
   window.addEventListener('gensolar:notification',e=>notify(e.detail||{}));
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
