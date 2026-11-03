@@ -22,3 +22,12 @@ Solar estimator; engineering and site design; PV, inverter, battery and cable si
 The source repositories currently contain an Android WebView application and a browser build. They are not yet a complete native iOS/Windows product. Cross-platform packaging, responsive QA, notification integration, security review and production builds must be completed and tested before release.
 
 Never commit Firebase service-account credentials, signing keys, private keys, or production secrets. Configure platform-specific public Firebase app settings through deployment configuration and keep authorization in trusted backend services.
+
+## Unified cross-platform project
+
+The repository now includes responsive web/PWA assets, an in-app notification inbox, Capacitor Android/iOS configuration, and a Tauri Windows desktop scaffold.
+
+- [Build and release instructions](docs/BUILD_AND_RELEASE.md)
+- [Cross-platform architecture and implementation status](docs/PLATFORM_ROADMAP.md)
+
+The Android APK and web static site are built by GitHub Actions. Windows installer and iOS Simulator build jobs are being validated. Production signing, App Store release and cross-device push notifications are not yet configured.
