@@ -38,3 +38,22 @@ Create a unified in-app notification inbox with unread count, categories, timest
 The destination repository has the core Android activity, solar UI asset, CRM web shim, web build script, Firebase web config, Firestore rules, Android build configuration and Pages deployment workflow imported from the source CRM repository. The original source repositories remain unchanged.
 
 This is a source baseline, not a finished all-platform release. Remaining work includes importing the complete source/assets and CI workflows, replacing the current Android-only packaging approach with a shared cross-platform shell, implementing native iOS and Windows packaging, responsive redesign/QA, notification delivery, Firebase authorization review, automated tests and signed release pipelines.
+
+## Implementation progress
+
+### Added to the destination repository
+- Imported the GenSolar Pro/CRM Android application source, browser bridge, engineering/EPC interface, product imagery, launcher assets, Firestore rules, build workflows, QA tests and setup documentation. Private signing material was not copied.
+- Added responsive layout rules for phone, tablet, landscape and desktop widths, including a desktop sidebar layout and a two-column welcome/sign-in screen.
+- Removed the Android portrait-only orientation lock.
+- Added an in-app notification inbox with unread count, local persistence, lead-created and follow-up-scheduled events, and due/overdue follow-up checks.
+- Added PWA metadata and an offline static shell for the web build.
+- Added Capacitor configuration for Android/iOS packaging and a Tauri Windows desktop wrapper scaffold.
+- Added cross-platform CI jobs for web smoke tests, Windows installer builds and iOS Simulator builds.
+
+### Remaining before production
+- Validate the latest Windows and iOS CI builds and fix any platform-specific build issues.
+- Generate and review native iOS and Capacitor Android projects; reconcile them with the existing Android WebView app before selecting one supported mobile release path.
+- Add backend-triggered cross-device push notifications, FCM/APNs configuration, notification preferences and consent.
+- Configure production signing and code-signing credentials outside Git.
+- Complete accessibility, screen-size, orientation, offline, authentication and role-security testing on real devices.
+- Complete qualified engineering validation of all solar design outputs and financial calculations.
