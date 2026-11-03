@@ -15,6 +15,8 @@ mkdirSync(out, { recursive: true });
 cpSync(assets, out, { recursive: true });
 cpSync('web/firebase-config.js', resolve(out, 'firebase-config.js'));
 cpSync('web/web-shim.js', resolve(out, 'web-shim.js'));
+cpSync('web/manifest.webmanifest', resolve(out, 'manifest.webmanifest'));
+cpSync('web/sw.js', resolve(out, 'sw.js'));
 
 let html = readFileSync(resolve(out, 'index.html'), 'utf8');
 const inject = [
@@ -28,7 +30,8 @@ const inject = [
 if (!html.includes('</body>')) throw new Error('index.html has no </body>');
 html = html.replace('</body>', inject + '\n</body>');
 // The Android-only "Update available" bar points at the APK. The website always serves the latest build.
-html = html.replace('<title>GenSolar Pro</title>', '<title>GenSolar Pro</title>\n<link rel="icon" href="gensolar_app_icon.png">');
+html = html.replace('<title>GenSolar Pro</title>', '<title>GenSolar Pro</title>\n<link rel="icon" href="gensolar_app_icon.png">\n<link rel="manifest" href="manifest.webmanifest">\n<meta name="theme-color" content="#064e3b">\n<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-status-bar-style" content="default">');
+html = html.replace('</body>', '<script>if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("./sw.js").catch(()=>{});</script>\n</body>');
 writeFileSync(resolve(out, 'index.html'), html);
 writeFileSync(resolve(out, '.nojekyll'), '');
 console.log(`Built web/dist for version ${version}`);
