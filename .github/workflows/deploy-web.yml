@@ -31,9 +31,19 @@ jobs:
           node-version: '22'
       - name: Build the website
         run: node web/build-web.mjs
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload static web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: gensolar-pro-web-site
+          path: web/dist
+      - id: pages
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+      - name: Prepare GitHub Pages artifact
+        if: steps.pages.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist
       - id: deployment
+        if: steps.pages.outcome == 'success'
         uses: actions/deploy-pages@v4
