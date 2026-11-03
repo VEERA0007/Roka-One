@@ -62,6 +62,20 @@ try {
   await page.waitForTimeout(200);
   check(await page.locator('#app').isVisible(), 'Guest estimator workspace can still be opened');
   check(await page.locator('#view-est').isVisible(), 'Estimator view is shown for guest exploration');
+  check(await page.locator('link[href="responsive.css"]').count() === 1, 'Responsive layout stylesheet is linked');
+  check(await page.locator('#gsNotificationButton').count() === 1, 'Notification inbox button is mounted in the application header');
+  await page.evaluate(() => window.GenSolarNotifications.notify({title:'Smoke test alert',body:'Responsive notification inbox test'}));
+  check(await page.locator('#gsNotificationCount').isVisible(), 'New notification increments the unread badge');
+  await page.locator('#gsNotificationButton').click();
+  check(await page.locator('#gsNotificationPanel').isVisible() && (await page.locator('#gsNotificationPanel').innerText()).includes('Smoke test alert'), 'Notification panel opens and displays new alerts');
+  await page.locator('#gsNotificationClose').click();
+  await page.setViewportSize({width:1366,height:768});
+  await page.waitForTimeout(100);
+  check(await page.locator('#app').evaluate(el => getComputedStyle(el).display) === 'grid', 'Desktop viewport switches to the sidebar dashboard layout');
+  check(await page.locator('.tabbar').evaluate(el => getComputedStyle(el).flexDirection) === 'column', 'Desktop navigation becomes a vertical sidebar');
+  await page.setViewportSize({width:390,height:844});
+  await page.waitForTimeout(100);
+  check(await page.locator('#app').evaluate(el => getComputedStyle(el).display) === 'flex', 'Mobile viewport returns to the compact layout');
   check(await page.locator('#amount').count() === 1 && await page.locator('#state').count() === 1,
     'Estimator has usage and state inputs');
   check(await page.locator('#out').count() === 1, 'Estimator results container is present');
