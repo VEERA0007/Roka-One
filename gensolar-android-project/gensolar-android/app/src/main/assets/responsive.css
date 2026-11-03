@@ -1,0 +1,74 @@
+/* Responsive cross-platform layout layer for GenSolar Pro */
+:root{--gs-safe-top:env(safe-area-inset-top,0px);--gs-safe-bottom:env(safe-area-inset-bottom,0px)}
+html{min-height:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{min-height:100%;overscroll-behavior-y:contain}
+button,a,input,select,textarea{touch-action:manipulation}
+img,svg,canvas{max-width:100%}
+#app{min-height:0;min-width:0}
+#app .amain{min-width:0;overscroll-behavior:contain}
+#app .page,#app .panel,#app .results,#app .card{min-width:0}
+#app .ahead{min-height:58px}
+#app .ahead .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#app .tabbar{flex:none}
+.wgate{min-height:100dvh;min-height:100svh}
+.wgate .wapp{min-height:100dvh;min-height:100svh}
+.wgate .sheet{overflow-y:auto;overscroll-behavior:contain}
+.wgate .hero{flex-shrink:0}
+.wl{min-height:100dvh;min-height:100svh}
+.wl .signin{width:min(100% - 32px,440px)}
+.feature-modal{overflow-y:auto}
+#gsNotificationButton{position:relative;flex:none;width:42px;height:42px;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer}
+#gsNotificationButton svg{width:21px;height:21px}
+#gsNotificationCount{position:absolute;right:-3px;top:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#b3261e;color:#fff;font:700 10px/18px system-ui;text-align:center}
+#gsNotificationCount[hidden]{display:none}
+#gsNotificationLayer{position:fixed;inset:0;z-index:12000;display:none}
+#gsNotificationLayer.open{display:block}
+#gsNotificationScrim{position:absolute;inset:0;background:rgba(4,20,15,.42)}
+#gsNotificationPanel{position:absolute;right:0;top:0;bottom:0;width:min(440px,100%);background:var(--surface);color:var(--ink);box-shadow:-12px 0 40px rgba(0,0,0,.18);display:flex;flex-direction:column;padding:calc(16px + var(--gs-safe-top)) 16px calc(16px + var(--gs-safe-bottom));}
+#gsNotificationPanel header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+#gsNotificationPanel h2{font:800 20px var(--font-display);margin:0}
+#gsNotificationPanel button{cursor:pointer}
+#gsNotificationClose{width:38px;height:38px;border:1px solid var(--line);border-radius:50%;background:var(--surface-2);color:var(--ink);font-size:20px}
+#gsNotificationActions{display:flex;gap:8px;flex-wrap:wrap;padding:12px 0}
+#gsNotificationActions button{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:9px;padding:8px 11px;font:600 12px var(--font-body)}
+#gsNotificationList{overflow:auto;display:flex;flex-direction:column;gap:9px}
+.gs-notice{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--surface);display:flex;gap:10px;align-items:flex-start}
+.gs-notice.unread{border-left:4px solid var(--deep);background:var(--surface-2)}
+.gs-notice .gs-notice-copy{min-width:0;flex:1}
+.gs-notice strong{display:block;font-size:14px}
+.gs-notice p{margin:3px 0 5px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.gs-notice time{font-size:11px;color:var(--muted)}
+.gs-notice button{border:0;background:transparent;color:var(--deep);font:600 12px var(--font-body);padding:4px}
+#gsNotificationEmpty{padding:32px 12px;text-align:center;color:var(--muted);font-size:14px}
+@media (min-width:900px){
+  #app{display:grid;grid-template-columns:236px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:100dvh}
+  #app .ahead{grid-column:1/-1;grid-row:1;padding-left:22px;padding-right:22px}
+  #app .amain{grid-column:2;grid-row:2;padding:clamp(24px,3vw,48px);max-width:none;width:100%}
+  #app .tabbar{grid-column:1;grid-row:2;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:7px;border-top:0;border-right:1px solid var(--line);padding:18px 12px calc(18px + var(--gs-safe-bottom))}
+  #app .tabbar button{flex-direction:row;justify-content:flex-start;gap:12px;padding:12px 14px;border-radius:10px;font-size:13px}
+  #app .tabbar button svg{width:20px;height:20px}
+  #app .page{max-width:1440px}
+  #gsNotificationPanel{top:58px;bottom:12px;height:auto;border-radius:16px;margin:0 12px 0 0}
+}
+@media (min-width:900px) and (max-height:650px){
+  #app .ahead{min-height:50px}
+  #app .amain{padding:18px 24px}
+}
+@media (max-width:899px){
+  #app{height:100dvh;height:100svh}
+  #app .tabbar{position:relative}
+}
+@media (max-width:520px){
+  #app .amain{padding:12px max(12px,env(safe-area-inset-right)) calc(16px + var(--gs-safe-bottom)) max(12px,env(safe-area-inset-left))}
+  #app .panel,#app .card{padding:13px}
+  #app .ahead .nm{font-size:17px}
+  #gsNotificationPanel{width:100%;border-radius:0}
+}
+@media (max-height:560px) and (orientation:landscape){
+  .wgate .wapp{height:auto;min-height:100dvh;overflow:visible}
+  .wgate .hero{height:calc(min(100vw,100vh)*.72)}
+  .wgate .sheet{min-height:0;padding-top:18px;padding-bottom:calc(18px + var(--gs-safe-bottom))}
+  .wgate .benefits{margin-top:12px}
+  .wl .signin{margin-top:12px}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
