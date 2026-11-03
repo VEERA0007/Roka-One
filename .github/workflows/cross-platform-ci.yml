@@ -1,0 +1,61 @@
+name: GenSolar Pro Cross-platform CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'gensolar-android-project/**'
+      - 'desktop/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'tests/**'
+      - '.github/workflows/cross-platform-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run build:web
+      - run: npm run test:web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gensolar-pro-web
+          path: web/dist
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm install
+      - run: npm run desktop:windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gensolar-pro-windows
+          path: desktop/src-tauri/target/release/bundle
+
+  ios-simulator:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run build:web
+      - run: npx cap add ios
+      - run: npx cap sync ios
+      - run: xcodebuild -workspace ios/App/App.xcworkspace -scheme App -sdk iphonesimulator -configuration Debug -destination 'generic/platform=iOS Simulator' build
