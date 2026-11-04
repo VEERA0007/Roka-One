@@ -2383,6 +2383,21 @@ function materialsHtml(){
   });
   return h+'</tbody></table></div>';
 }
+/* Expose the current EPC drawing set to the DPR print composer. */
+window.GenSolarGetEpcDprDrawings=function(){
+  if(!LA||!LA.cs||!LA.cs.length)return [];
+  var out=[];
+  LA.cs.forEach(function(c){
+    var n=c.b.name||'Block';
+    out.push({title:n+' · PV module layout / 3D view',kind:'svg',html:drawingSvg('iso',c,true)});
+    out.push({title:n+' · Structure only / 3D view',kind:'svg',html:drawingSvg('iso',c,false)});
+    out.push({title:n+' · Side elevation',kind:'svg',html:drawingSvg('elev',c,showPanels)});
+    out.push({title:n+' · Plan and foundation marking',kind:'svg',html:drawingSvg('plan',c,showPanels)});
+    out.push({title:n+' · Structural member schedule',kind:'table',html:memberHtml(c)});
+  });
+  out.push({title:'EPC Bill of Materials',kind:'table',html:materialsHtml()});
+  return out;
+};
 function epcPdf(pages){
   var d=new Date().toLocaleDateString('en-IN');
   var h=pages.map(function(p,i){return '<div class="ep-page"><div class="ep-ph"><b>'+esc(S.project.name||'Project')+(S.project.site?' · '+esc(S.project.site):'')+'</b><span>'+esc(p.title)+'</span><span>Sheet '+(i+1)+' of '+pages.length+' · '+d+'</span></div><div class="ep-pb">'+p.svg+'</div><div class="ep-pf">Gensolar EPC · preliminary drawing, dimensions in mm. Confirm with the project engineer before fabrication.</div></div>'}).join('');
