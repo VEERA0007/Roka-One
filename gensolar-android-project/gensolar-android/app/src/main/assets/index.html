@@ -1714,7 +1714,8 @@ function model(p){
   });
   $('updateLater').addEventListener('click',function(){lsSet('gs_update_skip',$('updateBar').dataset.v||'');$('updateBar').hidden=true});
   try{var _v=window.GenSolarNative&&window.GenSolarNative.appVersion?String(window.GenSolarNative.appVersion()):'';if(_v)$('verLabel').textContent='GenSolar Pro '+_v}catch(e){}
-  setTimeout(checkForUpdate,3000);\n  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')checkForUpdate()});\n  window.addEventListener('online',checkForUpdate);
+  setTimeout(checkForUpdate,3000);
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')checkForUpdate()});\n  window.addEventListener('online',checkForUpdate);
   paintAvatar();route();
 })();
 </script>
