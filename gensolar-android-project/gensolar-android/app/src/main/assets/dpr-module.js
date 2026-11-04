@@ -124,7 +124,7 @@ function tbl(head,rows,cls){return '<table class="dpr-t '+(cls||'')+'"><thead><t
 function kv(rows){return tbl(['Parameter','Value'],rows,'dpr-kv')}
 function lines(s){return String(s||'').split(/\r?\n/).map(function(x){return x.trim()}).filter(Boolean)}
 function ul(a){return '<ul class="dpr-ul">'+a.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>'}
-var WM='<picture class="dpr-wm"><source media="(monochrome)" srcset="dpr-watermark-grayscale.svg"><img src="dpr-watermark-colour.svg" alt=""></picture>';
+var WM='<picture class="dpr-wm"><source media="(monochrome)" srcset="dpr-watermark-grayscale.png"><img src="dpr-watermark-colour.png" alt=""></picture>';
 var LOGO='<div class="dpr-logo">GENS<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="#f4c400" stroke-width="3" stroke-dasharray="48 9" transform="rotate(-62 12 12)"/><path d="M13.5 3.5 9 13h3l-1.5 7.5L16 11h-3.2z" fill="#f4c400"/></svg>LAR<small>Light Up Your Life!</small></div>';
 function pg(inner){return '<article class="dpr-pg">'+WM+'<div class="dpr-pg-head">'+LOGO+'</div><div class="dpr-pg-body">'+inner+'</div><footer class="dpr-pg-foot"><b>GENESIS POWERONICS INDIA PRIVATE LIMITED</b><span>Registered Office : A-46, Madhura Nagar, Hyderabad, Telangana, India - 500038. CIN: U31101TG2006PTC050230.</span><span>Mobile: +91 9398735165, +91 40 67334455. Email ID: info@gensolar.in. Website: www.gensolar.in.</span></footer></article>'}
 function dprPages(){
