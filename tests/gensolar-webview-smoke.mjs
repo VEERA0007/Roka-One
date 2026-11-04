@@ -80,9 +80,12 @@ try {
     'DPR cover page updates from the project-name field');
   await page.evaluate(() => { window.print = () => { window.__dprPrintCalled = true; }; });
   await page.locator('#dpr_pdf').click();
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(750);
   check(await page.locator('#dprPrintRoot').count() === 1 && await page.evaluate(() => !!window.__dprPrintCalled),
     'Generate DPR PDF assembles the complete printable report and invokes the print-to-PDF flow');
+  check((await page.locator('#dprPrintRoot').innerText()).includes('PURPOSE AND SCOPE')
+    && await page.locator('#dprPrintRoot .dpr-pg').count() >= 2,
+    'DPR print output contains populated report pages rather than an empty print container');
   await page.locator('.tabbar button[data-tab="est"]').click();
   check(await page.locator('#view-est').isVisible() && await page.locator('#view-dpr').isHidden(),
     'Navigation leaves the DPR workspace cleanly and returns to the estimator');
