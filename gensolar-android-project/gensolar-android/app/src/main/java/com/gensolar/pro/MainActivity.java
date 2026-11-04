@@ -105,7 +105,6 @@ public class MainActivity extends Activity {
         setContentView(webView);
         webView.loadUrl("file:///android_asset/index.html");
         registerUpdateDownloadReceiver();
-        checkForAppUpdate();
     }
 
 
@@ -246,6 +245,7 @@ public class MainActivity extends Activity {
                     .setNegativeButton("Cancel", null).show();
                 return;
             }
+            getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE).edit().remove(KEY_DOWNLOAD_ID).apply();
             Intent install = new Intent(Intent.ACTION_VIEW);
             install.setDataAndType(apkUri, "application/vnd.android.package-archive");
             install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
