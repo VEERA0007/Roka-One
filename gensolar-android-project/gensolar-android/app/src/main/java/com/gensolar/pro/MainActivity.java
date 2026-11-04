@@ -769,99 +769,33 @@ public class MainActivity extends Activity {
                     printView.getSettings().setDomStorageEnabled(false);
                     printView.setWebViewClient(new WebViewClient() {
                         @Override public void onPageFinished(WebView view, String url) {
-                            view.postDelayed(() -> saveDprPdfToDownloads(printView), 700);
+                            view.postDelayed(() -> {
+                                try {
+                                    PrintManager manager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                                    if (manager == null) {
+                                        Toast.makeText(MainActivity.this, "Print service unavailable on this device.", Toast.LENGTH_LONG).show();
+                                        return;
+                                    }
+                                    PrintAttributes attributes = new PrintAttributes.Builder()
+                                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                        .setResolution(new PrintAttributes.Resolution("dpr", "dpr", 300, 300))
+                                        .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                                        .build();
+                                    manager.print("GenSolar Detailed Project Report",
+                                        printView.createPrintDocumentAdapter("GenSolar Detailed Project Report"), attributes);
+                                    Toast.makeText(MainActivity.this, "Choose Save as PDF and select Downloads to save your DPR.", Toast.LENGTH_LONG).show();
+                                } catch (Exception e) {
+                                    Log.e("GenSolar", "DPR print rendering failed", e);
+                                    Toast.makeText(MainActivity.this, "Could not prepare the DPR PDF. Please try again.", Toast.LENGTH_LONG).show();
+                                }
+                            }, 500);
                         }
                     });
                     printView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
                 } catch (Exception e) {
                     Log.e("GenSolar", "Could not create DPR print view", e);
-                    Toast.makeText(MainActivity.this, "Could not prepare the DPR PDF: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this, "Could not prepare the DPR PDF. Please try again.", Toast.LENGTH_LONG).show();
                 }
-            });
-        }
-
-        private void saveDprPdfToDownloads(WebView printView) {
-            android.net.Uri outputUri = null;
-            android.os.ParcelFileDescriptor output = null;
-            try {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    Toast.makeText(this, "Automatic Downloads saving requires Android 10 or later. Use Share / Save PDF.", Toast.LENGTH_LONG).show();
-                    return;
-                }
-                String stamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(new java.util.Date());
-                String fileName = "GenSolar_DPR_" + stamp + ".pdf";
-                android.content.ContentValues values = new android.content.ContentValues();
-                values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-                values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/pdf");
-                values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/GenSolar");
-                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1);
-                outputUri = getContentResolver().insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-                if (outputUri == null) throw new IllegalStateException("Could not create the PDF in Downloads.");
-                output = getContentResolver().openFileDescriptor(outputUri, "w");
-                if (output == null) throw new IllegalStateException("Could not open the PDF output file.");
-
-                final android.net.Uri savedUri = outputUri;
-                final android.os.ParcelFileDescriptor destination = output;
-                final android.print.PrintDocumentAdapter adapter = printView.createPrintDocumentAdapter("GenSolar DPR");
-                final PrintAttributes attributes = new PrintAttributes.Builder()
-                    .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                    .setResolution(new PrintAttributes.Resolution("gensolar", "gensolar", 300, 300))
-                    .setMinMargins(PrintAttributes.Margins.NO_MARGINS).build();
-
-                adapter.onLayout(null, attributes, new android.os.CancellationSignal(),
-                    new android.print.PrintDocumentAdapter.LayoutResultCallback() {
-                        @Override public void onLayoutFinished(android.print.PrintDocumentInfo info, boolean changed) {
-                            adapter.onWrite(new android.print.PageRange[]{android.print.PageRange.ALL_PAGES}, destination,
-                                new android.os.CancellationSignal(), new android.print.PrintDocumentAdapter.WriteResultCallback() {
-                                    @Override public void onWriteFinished(android.print.PageRange[] pages) {
-                                        try {
-                                            destination.close();
-                                            android.content.ContentValues ready = new android.content.ContentValues();
-                                            ready.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0);
-                                            getContentResolver().update(savedUri, ready, null, null);
-                                            Toast.makeText(MainActivity.this, "DPR PDF saved to Downloads/GenSolar/" + fileName, Toast.LENGTH_LONG).show();
-                                            Intent open = new Intent(Intent.ACTION_VIEW);
-                                            open.setDataAndType(savedUri, "application/pdf");
-                                            open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                            try { startActivity(Intent.createChooser(open, "Open or share DPR PDF")); }
-                                            catch (Exception ignored) { }
-                                        } catch (Exception e) {
-                                            Log.e("GenSolar", "Could not finalize DPR PDF", e);
-                                            Toast.makeText(MainActivity.this, "PDF created but could not be finalized.", Toast.LENGTH_LONG).show();
-                                        } finally {
-                                            releaseDprPrintView(printView);
-                                        }
-                                    }
-                                    @Override public void onWriteFailed(CharSequence error) {
-                                        try { destination.close(); getContentResolver().delete(savedUri, null, null); } catch (Exception ignored) { }
-                                        Toast.makeText(MainActivity.this, "DPR PDF generation failed: " + error, Toast.LENGTH_LONG).show();
-                                        releaseDprPrintView(printView);
-                                    }
-                                    @Override public void onWriteCancelled() {
-                                        try { destination.close(); getContentResolver().delete(savedUri, null, null); } catch (Exception ignored) { }
-                                        releaseDprPrintView(printView);
-                                    }
-                                });
-                        }
-                        @Override public void onLayoutFailed(CharSequence error) {
-                            try { destination.close(); getContentResolver().delete(savedUri, null, null); } catch (Exception ignored) { }
-                            Toast.makeText(MainActivity.this, "Could not lay out DPR PDF: " + error, Toast.LENGTH_LONG).show();
-                            releaseDprPrintView(printView);
-                        }
-                    }, null);
-            } catch (Exception e) {
-                Log.e("GenSolar", "DPR Downloads save failed", e);
-                try { if (output != null) output.close(); } catch (Exception ignored) { }
-                try { if (outputUri != null) getContentResolver().delete(outputUri, null, null); } catch (Exception ignored) { }
-                Toast.makeText(this, "Could not save DPR to Downloads: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                releaseDprPrintView(printView);
-            }
-        }
-
-        private void releaseDprPrintView(WebView printView) {
-            runOnUiThread(() -> {
-                if (dprPrintWebView == printView) dprPrintWebView = null;
-                try { printView.stopLoading(); printView.destroy(); } catch (Exception ignored) { }
             });
         }
 
