@@ -1,6 +1,14 @@
 package com.gensolar.pro;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
+import android.os.Environment;
+import android.provider.Settings;
+import androidx.core.content.ContextCompat;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -45,6 +53,11 @@ public class MainActivity extends Activity {
     private String pendingPhone;
     private ValueCallback<Uri[]> filePathCallback;
     private static final int FILE_CHOOSER = 1001;
+    private static final String UPDATE_API = "https://api.github.com/repos/VEERA0007/Roka-One/releases/latest";
+    private static final String UPDATE_PREFS = "gensolar_updates";
+    private static final String KEY_DOWNLOAD_ID = "pending_download_id";
+    private BroadcastReceiver updateDownloadReceiver;
+    private boolean updateDialogVisible = false;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -91,6 +104,175 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new AdminBridge(), "GenSolarAdmin");
         setContentView(webView);
         webView.loadUrl("file:///android_asset/index.html");
+        registerUpdateDownloadReceiver();
+        checkForAppUpdate();
+    }
+
+
+    private void registerUpdateDownloadReceiver() {
+        updateDownloadReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context context, Intent intent) {
+                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
+                long expected = getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE).getLong(KEY_DOWNLOAD_ID, -2L);
+                if (id == expected) openDownloadedUpdate(id);
+            }
+        };
+        ContextCompat.registerReceiver(this, updateDownloadReceiver,
+            new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), ContextCompat.RECEIVER_NOT_EXPORTED);
+    }
+
+    private void checkForAppUpdate() {
+        new Thread(() -> {
+            java.net.HttpURLConnection connection = null;
+            try {
+                connection = (java.net.HttpURLConnection) new java.net.URL(UPDATE_API).openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(10000);
+                connection.setReadTimeout(10000);
+                connection.setRequestProperty("Accept", "application/vnd.github+json");
+                connection.setRequestProperty("User-Agent", "GenSolar-Pro-Android");
+                if (connection.getResponseCode() != 200) return;
+                java.io.InputStream input = connection.getInputStream();
+                java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                int count;
+                while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                input.close();
+                JSONObject release = new JSONObject(output.toString("UTF-8"));
+                JSONArray assets = release.optJSONArray("assets");
+                if (assets == null) return;
+                String apkUrl = null;
+                String latestVersion = null;
+                for (int i = 0; i < assets.length(); i++) {
+                    JSONObject asset = assets.optJSONObject(i);
+                    if (asset == null) continue;
+                    String name = asset.optString("name", "");
+                    java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile("GenSolar-Pro-v([0-9]+(?:\\.[0-9]+){1,3})\\.apk", java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(name);
+                    if (matcher.matches()) {
+                        latestVersion = matcher.group(1);
+                        apkUrl = asset.optString("browser_download_url", null);
+                        break;
+                    }
+                }
+                if (apkUrl == null || latestVersion == null || !apkUrl.startsWith("https://github.com/")) return;
+                android.content.pm.PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+                String installedVersion = info.versionName == null ? "0" : info.versionName;
+                if (compareVersions(latestVersion, installedVersion) <= 0) return;
+                String finalUrl = apkUrl;
+                String finalVersion = latestVersion;
+                String notes = release.optString("body", "A newer version of GenSolar Pro is available.");
+                runOnUiThread(() -> showUpdateAvailable(finalVersion, finalUrl, notes));
+            } catch (Exception e) {
+                Log.w("GenSolar", "Update check failed", e);
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }, "GenSolarUpdateCheck").start();
+    }
+
+    private int compareVersions(String first, String second) {
+        String[] a = first.split("\\.");
+        String[] b = second.split("\\.");
+        int length = Math.max(a.length, b.length);
+        for (int i = 0; i < length; i++) {
+            int x = i < a.length ? parseVersionPart(a[i]) : 0;
+            int y = i < b.length ? parseVersionPart(b[i]) : 0;
+            if (x != y) return x > y ? 1 : -1;
+        }
+        return 0;
+    }
+
+    private int parseVersionPart(String value) {
+        try { return Integer.parseInt(value); } catch (Exception ignored) { return 0; }
+    }
+
+    private void showUpdateAvailable(String version, String apkUrl, String notes) {
+        if (isFinishing() || updateDialogVisible) return;
+        android.content.SharedPreferences prefs = getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE);
+        if (version.equals(prefs.getString("dismissed_version", ""))) return;
+        updateDialogVisible = true;
+        new AlertDialog.Builder(this)
+            .setTitle("GenSolar Pro update available")
+            .setMessage("Version " + version + " is ready to install.\n\nAndroid will ask you to confirm installation.\n\nRelease notes: " +
+                (notes.length() > 500 ? notes.substring(0, 500) : notes))
+            .setCancelable(true)
+            .setPositiveButton("Update now", (dialog, which) -> downloadUpdate(version, apkUrl))
+            .setNegativeButton("Later", (dialog, which) -> prefs.edit().putString("dismissed_version", version).apply())
+            .setOnDismissListener(dialog -> updateDialogVisible = false)
+            .show();
+    }
+
+    private void downloadUpdate(String version, String apkUrl) {
+        try {
+            if (!apkUrl.startsWith("https://github.com/")) {
+                Toast.makeText(this, "Update source could not be verified.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (manager == null) throw new IllegalStateException("Download service unavailable");
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
+            request.setTitle("GenSolar Pro " + version);
+            request.setDescription("Downloading the latest GenSolar Pro update");
+            request.setMimeType("application/vnd.android.package-archive");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "GenSolar-Pro-update.apk");
+            long id = manager.enqueue(request);
+            getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE).edit().putLong(KEY_DOWNLOAD_ID, id).apply();
+            Toast.makeText(this, "Update downloading. You will be asked to install it when ready.", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            Log.e("GenSolar", "Could not download update", e);
+            Toast.makeText(this, "Could not download the update. Please try again.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void openDownloadedUpdate(long downloadId) {
+        try {
+            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (manager == null) return;
+            Uri apkUri = manager.getUriForDownloadedFile(downloadId);
+            if (apkUri == null) {
+                Toast.makeText(this, "Update download failed. Please try again.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
+                getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE).edit().putLong(KEY_DOWNLOAD_ID, downloadId).apply();
+                new AlertDialog.Builder(this)
+                    .setTitle("Allow GenSolar Pro installation")
+                    .setMessage("Enable Allow from this source to install the update you requested.")
+                    .setPositiveButton("Open settings", (d, w) -> startActivity(new Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()))))
+                    .setNegativeButton("Cancel", null).show();
+                return;
+            }
+            Intent install = new Intent(Intent.ACTION_VIEW);
+            install.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(install);
+        } catch (Exception e) {
+            Log.e("GenSolar", "Could not open APK installer", e);
+            Toast.makeText(this, "Could not open Android installer. Check Downloads for the APK.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        android.content.SharedPreferences prefs = getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE);
+        long pendingId = prefs.getLong(KEY_DOWNLOAD_ID, -1L);
+        if (pendingId > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && getPackageManager().canRequestPackageInstalls()) {
+            openDownloadedUpdate(pendingId);
+        } else {
+            checkForAppUpdate();
+        }
+    }
+
+    @Override protected void onDestroy() {
+        if (updateDownloadReceiver != null) {
+            try { unregisterReceiver(updateDownloadReceiver); } catch (Exception ignored) { }
+            updateDownloadReceiver = null;
+        }
+        super.onDestroy();
     }
 
     private void installCrashRecorder() {
