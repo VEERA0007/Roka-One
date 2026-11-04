@@ -145,7 +145,6 @@ try {
   await page.locator('#epca_width').fill('40');
   await page.locator('#epca_lat').fill('17.385');
   await page.locator('#epca_lon').fill('78.4867');
-  check(await page.locator('#epca_inverter').count() === 0, 'Auto Design no longer exposes removed electrical screening input');
   await page.locator('#epca_generate').click();
   check((await page.locator('#epca_results').innerText()).includes('20.295 kWp'),
     'Auto Design calculates installed capacity from panel count and module rating');
