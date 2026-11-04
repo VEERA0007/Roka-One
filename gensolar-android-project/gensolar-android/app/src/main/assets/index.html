@@ -1444,8 +1444,8 @@ function model(p){
     $('hsub').textContent=r==='guest'?'Guest · rooftop solar estimator':roleLabel()+' · rooftop solar estimator';
     $('tabLeads').hidden=(r==='guest');
     $('tabEng').hidden=(r!=='manager');
-    $('tabCrm').hidden=(r!=='manager');
-    $('tabTeam').hidden=!(session&&session.raw==='admin');
+    $('tabCrm').hidden=true;
+    $('tabTeam').hidden=!(session&&(session.raw==='admin'||r==='manager'));
     $('tabLeadsLbl').textContent=comp?'Leads':'My estimates';
     paintAvatar();
   }
@@ -1496,21 +1496,21 @@ function model(p){
   $('engCalc').addEventListener('click',function(){engSave();renderEngineering();toast('Preliminary design recalculated. Confirm with engineering before quoting.')});
   function showView(v){
     if(v==='leads'&&role()==='guest')v='est';
-    if((v==='engineering'||v==='crm')&&role()!=='manager'){v='est';history.replaceState(null,'','#est')}
+    if((v==='engineering'||v==='crm')&&role()!=='manager'){v='est';history.replaceState(null,'','#est')} if(v==='team'&&role()!=='manager'&&!(session&&session.raw==='admin')){v='est';history.replaceState(null,'','#est')}
     activeTab=v;
-    ['est','leads','profile','engineering','team','crm'].forEach(function(x){$('view-'+x).hidden=(x!==v)});
+    ['est','leads','profile','engineering','team'].forEach(function(x){$('view-'+x).hidden=(x!==v)}); if($('view-crm'))$('view-crm').hidden=(v!=='team'); if($('teamAdminOnly'))$('teamAdminOnly').hidden=!(session&&session.raw==='admin');
     document.querySelectorAll('.tabbar button').forEach(function(b){if(b.getAttribute('data-tab')===v)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
     paintShell();
     if(v==='leads')renderLeads();
     if(v==='profile')paintProfile();
     if(v==='engineering')renderEngineering();
-    if(v==='crm')renderCrm();
-    if(v==='team')loadTeam();
+    if(v==='team'||v==='crm')renderCrm();
+    if(v==='team'&&session&&session.raw==='admin')loadTeam();
     $('amain').scrollTop=0;
   }
   function route(){
     var h=location.hash.replace('#','');
-    var inApp=(h==='est'||h==='leads'||h==='profile'||(h==='engineering'&&role()==='manager')||(h==='crm'&&role()==='manager')||(h==='team'&&session&&session.raw==='admin'))&&session;
+    var inApp=(h==='est'||h==='leads'||h==='profile'||(h==='engineering'&&role()==='manager')||(h==='crm'&&role()==='manager')||(h==='team'&&(role()==='manager'||(session&&session.raw==='admin'))))&&session;
     $('app').hidden=!inApp;
     $('authGate').classList.toggle('hide-auth',!!inApp);
     if(inApp){showSheet(false);showView(h)}
@@ -2393,5 +2393,6 @@ projOpts();bindInputs();
 bindInputs();renderBlocks();render();
 })();
 </script>
+<script src="dpr-module.js" defer></script>
 <script src="notification-center.js" defer></script>
 </body></html>
