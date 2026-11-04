@@ -99,6 +99,7 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) { reportLastCrash(); restoreSession(); }
         });
         webView.addJavascriptInterface(new PrintBridge(), "GenSolarNative");
+        webView.addJavascriptInterface(new UpdateBridge(), "GenSolarUpdates");
         webView.addJavascriptInterface(new AuthBridge(), "GenSolarAuth");
         webView.addJavascriptInterface(new LeadBridge(), "GenSolarLeads");
         webView.addJavascriptInterface(new AdminBridge(), "GenSolarAdmin");
@@ -120,7 +121,9 @@ public class MainActivity extends Activity {
             new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
-    private void checkForAppUpdate() {
+    private void checkForAppUpdate() { checkForAppUpdate(false); }
+
+    private void checkForAppUpdate(boolean manual) {
         new Thread(() -> {
             java.net.HttpURLConnection connection = null;
             try {
@@ -130,7 +133,7 @@ public class MainActivity extends Activity {
                 connection.setReadTimeout(10000);
                 connection.setRequestProperty("Accept", "application/vnd.github+json");
                 connection.setRequestProperty("User-Agent", "GenSolar-Pro-Android");
-                if (connection.getResponseCode() != 200) return;
+                if (connection.getResponseCode() != 200) { if (manual) runOnUiThread(() -> Toast.makeText(this, "Could not check for updates. Check your internet connection.", Toast.LENGTH_LONG).show()); return; }
                 java.io.InputStream input = connection.getInputStream();
                 java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
                 byte[] buffer = new byte[4096];
@@ -155,16 +158,17 @@ public class MainActivity extends Activity {
                         break;
                     }
                 }
-                if (apkUrl == null || latestVersion == null || !apkUrl.startsWith("https://github.com/")) return;
+                if (apkUrl == null || latestVersion == null || !apkUrl.startsWith("https://github.com/")) { if (manual) runOnUiThread(() -> Toast.makeText(this, "Latest release APK was not found.", Toast.LENGTH_LONG).show()); return; }
                 android.content.pm.PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
                 String installedVersion = info.versionName == null ? "0" : info.versionName;
-                if (compareVersions(latestVersion, installedVersion) <= 0) return;
+                if (compareVersions(latestVersion, installedVersion) <= 0) { if (manual) runOnUiThread(() -> Toast.makeText(this, "You are using the latest version " + installedVersion + ".", Toast.LENGTH_LONG).show()); return; }
                 String finalUrl = apkUrl;
                 String finalVersion = latestVersion;
                 String notes = release.optString("body", "A newer version of GenSolar Pro is available.");
-                runOnUiThread(() -> showUpdateAvailable(finalVersion, finalUrl, notes));
+                runOnUiThread(() -> showUpdateAvailable(finalVersion, finalUrl, notes, manual));
             } catch (Exception e) {
                 Log.w("GenSolar", "Update check failed", e);
+                if (manual) runOnUiThread(() -> Toast.makeText(this, "Update check failed. Please try again.", Toast.LENGTH_LONG).show());
             } finally {
                 if (connection != null) connection.disconnect();
             }
@@ -187,10 +191,10 @@ public class MainActivity extends Activity {
         try { return Integer.parseInt(value); } catch (Exception ignored) { return 0; }
     }
 
-    private void showUpdateAvailable(String version, String apkUrl, String notes) {
+    private void showUpdateAvailable(String version, String apkUrl, String notes, boolean manual) {
         if (isFinishing() || updateDialogVisible) return;
         android.content.SharedPreferences prefs = getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE);
-        if (version.equals(prefs.getString("dismissed_version", ""))) return;
+        if (!manual && version.equals(prefs.getString("dismissed_version", ""))) return;
         updateDialogVisible = true;
         new AlertDialog.Builder(this)
             .setTitle("GenSolar Pro update available")
@@ -705,6 +709,13 @@ public class MainActivity extends Activity {
 
     private void leadError(String message) {
         js("window.onGenSolarCloudError && window.onGenSolarCloudError(" + JSONObject.quote(message) + ")");
+    }
+
+    private class UpdateBridge {
+        @JavascriptInterface public void checkForUpdates() {
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, "Checking for GenSolar Pro updates...", Toast.LENGTH_SHORT).show());
+            checkForAppUpdate(true);
+        }
     }
 
     private class PrintBridge {
