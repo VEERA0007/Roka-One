@@ -1469,21 +1469,32 @@ function model(p){
   function engStat(label,value,sub){return '<div class="stat"><span>'+label+'</span><b>'+value+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div>'}
   function renderEngineering(){
     if(!$('engResults'))return;
-    var kw=engVal('engCapacity'),wp=engVal('engPanelW'),roof=engVal('engRoof'),areaKw=engVal('engRoofPerKw'),inv=engVal('engInverter'),aep=engVal('engAep'),cuf=engVal('engCuf');
-    var count=kw>0&&wp>0?Math.ceil(kw*1000/wp):0,area=kw>0&&areaKw>0?kw*areaKw:0,roofCap=roof>0&&areaKw>0?roof/areaKw:null,ratio=kw>0&&inv>0?kw/inv:null;
+    var targetKw=engVal('engCapacity'),wp=engVal('engPanelW'),roof=engVal('engRoof'),areaKw=engVal('engRoofPerKw'),inv=engVal('engInverter'),aep=engVal('engAep'),cuf=engVal('engCuf');
+    var validTarget=targetKw>0,validWp=wp>0,panels=validTarget&&validWp?Math.ceil((targetKw*1000)/wp):0;
+    var actualKw=panels>0?panels*wp/1000:0;
+    var area=actualKw>0&&areaKw>0?actualKw*areaKw:0;
+    var roofCap=roof>0&&areaKw>0?roof/areaKw:null;
+    var ratio=actualKw>0&&inv>0?actualKw/inv:null;
     var items=[];
-    items.push(engStat('DC capacity',kw>0?num(kw,2)+' kWp':'—','Target array size'));
-    items.push(engStat('Module count',count?num(count)+' panels':'—',wp>0?num(wp)+' Wp each':'Select module rating'));
-    items.push(engStat('Planning roof area',area>0?num(area)+' sq ft':'—',areaKw>0?num(areaKw)+' sq ft per kW':'Set planning area'));
-    items.push(engStat('Roof capacity',roofCap!=null?num(roofCap,2)+' kWp':'Not entered',roofCap!=null&&kw>roofCap?'Target exceeds entered roof capacity':'Based on planning-area assumption'));
-    items.push(engStat('DC / AC ratio',ratio!=null?ratio.toFixed(2)+' : 1':'Enter inverter capacity',ratio!=null&&ratio>1.5?'Engineer to verify sizing':'Preliminary ratio only'));
+    items.push(engStat('Requested DC capacity',validTarget?num(targetKw,2)+' kWp':'Enter a valid capacity','Target array size'));
+    items.push(engStat('Module count',panels?num(panels)+' panels':'—',validWp?num(wp)+' Wp each':'Select module rating'));
+    items.push(engStat('Actual installed DC capacity',actualKw?num(actualKw,3)+' kWp':'—',panels?'Panel count × module Wp':'Calculated after selecting capacity and panel'));
+    items.push(engStat('Planning roof area',area?num(area)+' sq ft':'—',areaKw>0?num(areaKw)+' sq ft per kW':'Set planning area'));
+    items.push(engStat('Roof capacity',roofCap!=null?num(roofCap,2)+' kWp':'Not entered',roofCap!=null&&actualKw>roofCap?'Warning: actual array exceeds entered roof capacity':'Based on planning-area assumption'));
+    items.push(engStat('Actual DC / AC ratio',ratio!=null?ratio.toFixed(2)+' : 1':'Enter inverter capacity',ratio!=null&&(ratio<1||ratio>1.5)?'Engineer to verify inverter sizing':'Preliminary ratio only'));
     $('engResults').innerHTML=items.join('');
-    var annual=(kw>0&&aep>0)?kw*aep:null;
-    var derived=annual!=null?annual/(kw*8760)*100:null;
-    var shownCuf=cuf>0?cuf:derived;
-    var energyBits=[];
-    energyBits.push(annual!=null?num(annual)+' kWh/year estimated from entered yield':'Enter annual yield to calculate generation');
-    if(shownCuf!=null&&isFinite(shownCuf))energyBits.push('CUF '+shownCuf.toFixed(1)+'%'+(cuf>0?' (entered)':' (calculated from annual yield)'));
+    var annual=null,derivedCuf=null,energyBits=[];
+    if(actualKw>0&&aep>0)annual=actualKw*aep;
+    else if(actualKw>0&&cuf>0&&cuf<=100)annual=actualKw*8760*cuf/100;
+    if(annual!=null)derivedCuf=annual/(actualKw*8760)*100;
+    energyBits.push(annual!=null?num(annual)+' kWh/year estimated':'Enter annual yield or CUF to calculate generation');
+    if(annual!=null)energyBits.push('Monthly average '+num(annual/12)+' kWh');
+    if(cuf>0&&cuf<=100)energyBits.push('CUF '+cuf.toFixed(1)+'% (entered)');
+    else if(derivedCuf!=null)energyBits.push('CUF '+derivedCuf.toFixed(1)+'% (calculated)');
+    if(aep>0&&cuf>0&&cuf<=100&&actualKw>0){
+      var cufFromYield=(aep/8760)*100;
+      if(Math.abs(cufFromYield-cuf)>1)energyBits.push('Check: entered CUF differs from annual-yield-derived CUF ('+cufFromYield.toFixed(1)+'%)');
+    }
     if(engVal('engGhi')>0)energyBits.push('GHI '+num(engVal('engGhi'),2)+' kWh/m²/day');
     if(engVal('engGti')>0)energyBits.push('GTI '+num(engVal('engGti'),2)+' kWh/m²/day');
     if($('engSource').value.trim())energyBits.push('Source: '+esc($('engSource').value.trim()));
