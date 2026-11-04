@@ -111,7 +111,7 @@
       '<tr><td>Estimated strings</td><td>'+strings+'</td><td>Final MPPT allocation to be engineered</td></tr></tbody></table>';
     $('epca_schedule').innerHTML=table;
     $('epca_warnings').textContent=warnings.length?warnings.join(' '):'Preliminary design generated. Verify all inputs and engineering constraints before issue for construction.';
-    last={project:$('epca_project').value,segment:$('epca_segment').value,mode:mode,lat:val('epca_lat'),lon:val('epca_lon'),kw:kw,wp:wp,modules:installed,actualKw:actualKw,moduleW:mw,moduleL:ml,orientation:$('epca_orientation').value,siteLength:len,siteWidth:wid,tilt:tilt,azimuth:val('epca_azimuth'),cols:cols,rows:rows,pitch:pitch,panelW:panelW,panelDepth:projected,railLines:railLines,supports:supports,maxSeries:maxSeries,strings:strings,coldVoc:coldVoc,dcCable:dcCable,acCable:acCable,inv:inv,ratio:ratio,allowance:val('epca_allowance'),warnings:warnings,area:usableArea,panelArea:panelArea};
+    last={project:$('epca_project').value,segment:$('epca_segment').value,mode:mode,lat:val('epca_lat'),lon:val('epca_lon'),kw:kw,wp:wp,modules:installed,actualKw:actualKw,moduleW:mw,moduleL:ml,orientation:$('epca_orientation').value,siteLength:len,siteWidth:wid,tilt:tilt,azimuth:val('epca_azimuth'),cols:cols,rows:rows,pitch:pitch,panelW:panelW,panelDepth:projected,railLines:railLines,supports:supports,maxSeries:maxSeries,strings:strings,coldVoc:coldVoc,dcCable:dcCable,acCable:acCable,inv:inv,ratio:ratio,allowance:val('epca_allowance'),setback:setback,walkway:walk,warnings:warnings,area:usableArea,panelArea:panelArea};
     save();
   }
   function csvText(){
@@ -128,7 +128,7 @@
     function rect(x,y,w,h,layer){var p=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];for(var i=0;i<4;i++){var a=p[i],b=p[(i+1)%4];L.push('0','LINE','8',layer,'10',String(a[0]),'20',String(a[1]),'30','0','11',String(b[0]),'21',String(b[1]),'31','0')}}
     rect(0,0,last.siteWidth,last.siteLength,'SITE_BOUNDARY');
     var n=0,rows=Math.ceil(last.modules/Math.max(1,last.cols));
-    for(var r=0;r<rows;r++)for(var c=0;c<last.cols&&n<last.modules;c++){var x=.5+c*last.panelW,y=.5+r*last.pitch;if(x+last.panelW<=last.siteWidth&&y+last.panelDepth<=last.siteLength){rect(x,y,last.panelW,last.panelDepth,'PV_MODULES');n++}}
+    for(var r=0;r<rows;r++)for(var c=0;c<last.cols&&n<last.modules;c++){var x=last.setback+last.walkway+c*last.panelW,y=last.setback+r*last.pitch;if(x+last.panelW<=last.siteWidth&&y+last.panelDepth<=last.siteLength){rect(x,y,last.panelW,last.panelDepth,'PV_MODULES');n++}}
     L.push('0','ENDSEC','0','EOF');download('GenSolar-EPC-Auto-Layout.dxf','application/dxf',L.join('\n'));
   }
   function sld(){
