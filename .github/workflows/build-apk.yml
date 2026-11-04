@@ -54,8 +54,11 @@ jobs:
         run: |
           if [ -n "${DEBUG_KEYSTORE_BASE64:-}" ]; then
             echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > debug.keystore
+          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=GenSolar PR Test,O=Android,C=US"
           else
-            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            echo "::error::Set the repository Actions secret GENSOLAR_DEBUG_KEYSTORE_BASE64 before publishing releases. A changing debug key prevents Android in-place updates."
+            exit 1
           fi
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.GENSOLAR_DEBUG_KEYSTORE_BASE64 }}
