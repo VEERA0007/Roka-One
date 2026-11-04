@@ -46,6 +46,7 @@ import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends Activity {
     private WebView webView;
+    private WebView dprPrintWebView;
     private FirebaseAuth auth;
     private FirebaseFirestore db;
     private String verificationId;
@@ -276,6 +277,7 @@ public class MainActivity extends Activity {
             try { unregisterReceiver(updateDownloadReceiver); } catch (Exception ignored) { }
             updateDownloadReceiver = null;
         }
+        if (dprPrintWebView != null) { try { dprPrintWebView.destroy(); } catch (Exception ignored) { } dprPrintWebView = null; }
         super.onDestroy();
     }
 
@@ -749,6 +751,53 @@ public class MainActivity extends Activity {
                 } catch (Exception e) { Toast.makeText(MainActivity.this, "Could not open PDF print service", Toast.LENGTH_LONG).show(); }
             });
         }
+        @JavascriptInterface public void printDprHtml(String html) {
+            runOnUiThread(() -> {
+                try {
+                    if (html == null || html.trim().isEmpty()) {
+                        Toast.makeText(MainActivity.this, "DPR document is empty. Please generate it again.", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    if (dprPrintWebView != null) {
+                        try { dprPrintWebView.stopLoading(); dprPrintWebView.destroy(); } catch (Exception ignored) { }
+                        dprPrintWebView = null;
+                    }
+                    final WebView printView = new WebView(MainActivity.this);
+                    dprPrintWebView = printView;
+                    printView.setBackgroundColor(Color.WHITE);
+                    printView.getSettings().setJavaScriptEnabled(false);
+                    printView.getSettings().setDomStorageEnabled(false);
+                    printView.setWebViewClient(new WebViewClient() {
+                        @Override public void onPageFinished(WebView view, String url) {
+                            view.postDelayed(() -> {
+                                try {
+                                    PrintManager manager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                                    if (manager == null) {
+                                        Toast.makeText(MainActivity.this, "Print service unavailable on this device.", Toast.LENGTH_LONG).show();
+                                        return;
+                                    }
+                                    PrintAttributes attributes = new PrintAttributes.Builder()
+                                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                        .setResolution(new PrintAttributes.Resolution("dpr", "dpr", 300, 300))
+                                        .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                                        .build();
+                                    manager.print("GenSolar Detailed Project Report",
+                                        printView.createPrintDocumentAdapter("GenSolar Detailed Project Report"), attributes);
+                                } catch (Exception e) {
+                                    Log.e("GenSolar", "DPR print rendering failed", e);
+                                    Toast.makeText(MainActivity.this, "Could not prepare the DPR PDF. Please try again.", Toast.LENGTH_LONG).show();
+                                }
+                            }, 500);
+                        }
+                    });
+                    printView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
+                } catch (Exception e) {
+                    Log.e("GenSolar", "Could not create DPR print view", e);
+                    Toast.makeText(MainActivity.this, "Could not prepare the DPR PDF. Please try again.", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
         @JavascriptInterface public void printPdf() {
             runOnUiThread(() -> {
                 try {
