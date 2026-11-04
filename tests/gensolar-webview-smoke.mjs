@@ -89,6 +89,7 @@ try {
 
   check(await page.locator('link[href="responsive.css"]').count() === 1, 'Responsive layout stylesheet is linked');
   check(await page.locator('#gsNotificationButton').count() === 1, 'Notification inbox button is mounted in the application header');
+  check(await page.locator('#pfCheckUpdates').count() === 1, 'Profile includes a manual Check for Updates control');
   await page.evaluate(() => window.GenSolarNotifications.notify({title:'Smoke test alert',body:'Responsive notification inbox test'}));
   check(await page.locator('#gsNotificationCount').isVisible(), 'New notification increments the unread badge');
   await page.locator('#gsNotificationButton').click();
