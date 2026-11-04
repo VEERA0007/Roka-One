@@ -109,6 +109,66 @@ try {
   check(await page.locator('#out').isVisible(), 'Estimator produces a visible result after changing the monthly usage input');
   check((await page.locator('#tSize').innerText()).trim().length > 0, 'Estimator calculates and displays a system-size result');
 
+  // Open the existing EPC workspace directly for component smoke coverage.
+  await page.evaluate(() => {
+    document.querySelectorAll('.page').forEach(el => { el.hidden = true; });
+    document.getElementById('view-engineering').hidden = false;
+  });
+  check(await page.locator('#epcRoot').isVisible(), 'Existing EPC workspace remains mounted and visible');
+  const originalTabs = ['site','layout','draw','elec','bom','docs'];
+  for (const tab of originalTabs) {
+    check(await page.locator('#epc_tabs [data-t="' + tab + '"]').count() === 1,
+      'Original EPC tab remains available: ' + tab);
+  }
+  check(await page.locator('#epc_stages [data-st="eng"]').count() === 1
+    && await page.locator('#epc_stages [data-st="proc"]').count() === 1
+    && await page.locator('#epc_stages [data-st="cons"]').count() === 1,
+    'Original Engineering, Procurement and Construction stages remain available');
+  await page.locator('#engSite').fill('Existing EPC project site');
+  await page.locator('#engCapacity').fill('21.26');
+  await page.locator('#epc_tabs [data-t="autodesign"]').click();
+  check(await page.locator('#epc_p-autodesign').isVisible(), 'New Auto Design is added as a separate EPC Engineering tab');
+  check(await page.locator('#epc_tabs [data-t="autodesign"]').count() === 1,
+    'New Auto Design tab is present without replacing the original tabs');
+  await page.locator('#epca_import').click();
+  check((await page.locator('#epca_project').inputValue()) === 'Existing EPC project site'
+    && (await page.locator('#epca_capacity').inputValue()) === '21.26',
+    'Auto Design can import existing EPC Site values on request');
+  check((await page.locator('#engSite').inputValue()) === 'Existing EPC project site'
+    && (await page.locator('#engCapacity').inputValue()) === '21.26',
+    'Import does not modify existing EPC Site inputs');
+  await page.locator('#epca_capacity').fill('20');
+  await page.locator('#epca_wp').fill('615');
+  await page.locator('#epca_module_w').fill('1.038');
+  await page.locator('#epca_module_l').fill('2.278');
+  await page.locator('#epca_length').fill('20');
+  await page.locator('#epca_width').fill('40');
+  await page.locator('#epca_lat').fill('17.385');
+  await page.locator('#epca_lon').fill('78.4867');
+  await page.locator('#epca_inverter').fill('20');
+  await page.locator('#epca_generate').click();
+  check((await page.locator('#epca_results').innerText()).includes('20.295 kWp'),
+    'Auto Design calculates installed capacity from panel count and module rating');
+  check(await page.locator('#epca_layout svg').count() === 1,
+    'Auto Design generates a dimensioned SVG concept layout');
+  check(await page.locator('#epca_schedule table').count() === 1,
+    'Auto Design generates a separate preliminary BOM and cable schedule');
+  await page.locator('[data-epca-mode="ground"]').click();
+  check((await page.locator('#epca_modeLabel').innerText()).includes('Ground-mounted'),
+    'Auto Design supports ground-mounted mode');
+  await page.locator('#epca_generate').click();
+  check(await page.locator('#epca_layout svg').count() === 1,
+    'Ground-mounted mode also generates a panel layout');
+  for (const tab of originalTabs) {
+    await page.locator('#epc_tabs [data-t="' + tab + '"]').click();
+    check(await page.locator('#epc_p-' + tab).isVisible(),
+      'Original EPC tab still opens after Auto Design use: ' + tab);
+  }
+  check(await page.locator('#epc_saveProj').count() === 1
+    && await page.locator('#epc_newProj').count() === 1
+    && await page.locator('#epc_loadRef').count() === 1,
+    'Original EPC Save project, New and Example controls remain available');
+
   check(errors.length === 0, 'No uncaught JavaScript errors: ' + (errors.join(' | ') || 'none'));
 } finally {
   await browser.close();
