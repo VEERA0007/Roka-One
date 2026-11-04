@@ -543,6 +543,7 @@ html,body{margin:0;height:100%;background:#fff}
         <div class="field"><label for="pfPhone">Mobile</label><input id="pfPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="10-digit mobile number"></div>
         <div class="qrow"><button class="btn" id="pfSave" type="button">Save profile</button><button class="btn alt" id="pfRemove" type="button" hidden>Remove photo</button></div>
         <div class="qrow"><button class="btn danger" id="pfSignOut" type="button">Sign out</button><button class="btn" id="pfSignIn" type="button" hidden>Sign in with OTP</button></div>
+        <div class="qrow"><button class="btn alt" id="pfCheckUpdates" type="button">Check for updates</button></div>
         <small id="verLabel" style="color:var(--muted)">GenSolar Pro</small>
       </div>
     </section>
@@ -1293,6 +1294,12 @@ function model(p){
   $('pfRemove').addEventListener('click',function(){var p=profile();p.photo='';lsSet('gs_profile_v2',p);paintAvatar();toast('Photo removed')});
   $('pfSignOut').addEventListener('click',function(){signOut()});
   $('pfSignIn').addEventListener('click',function(){location.hash='#login'});
+  $('pfCheckUpdates').addEventListener('click',function(){
+    try{
+      if(window.GenSolarUpdates&&window.GenSolarUpdates.checkForUpdates){window.GenSolarUpdates.checkForUpdates();}
+      else{window.open('https://github.com/VEERA0007/Roka-One/releases/latest','_blank');toast('Opening the latest GenSolar Pro release');}
+    }catch(e){toast('Could not start update check. Please try again');}
+  });
 
   /* ---------- leads ---------- */
   function leads(){return lsGet('gs_leads_v2',[])}
