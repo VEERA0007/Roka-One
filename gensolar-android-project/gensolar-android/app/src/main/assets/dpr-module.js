@@ -61,7 +61,31 @@ function init(){
 }
 var timer;function laterSave(){clearTimeout(timer);timer=setTimeout(save,900)}
 function cover(){var m={project:'projectName',customer:'customerName',mobile:'mobile',address:'address'};Object.keys(m).forEach(function(k){var e=$('dpr_cv_'+k),f=$('dpr_'+m[k]);if(e)e.textContent=f?f.value:''});var z=$('dpr_cv_size'),c=$('dpr_capacity');if(z)z.textContent=c&&c.value.trim()?c.value.trim()+' kWp':'';fitCover()}
-function importEpc(){var map={projectName:'engSite',siteName:'engSite',state:'engState',capacity:'engCapacity',moduleTech:'engPanelTech',moduleWp:'engPanelW',inverterCapacity:'engInverter',annualGeneration:'engAep',cuf:'engCuf',roofArea:'engRoof'};Object.keys(map).forEach(function(k){var a=$(map[k]),b=$('dpr_'+k);if(a&&b&&a.value)b.value=a.value});var lat=$('engLat'),lon=$('engLon'),co=$('dpr_coordinates');if(lat&&lon&&co&&lat.value&&lon.value)co.value=lat.value+', '+lon.value;cover();save();toast('Available EPC inputs imported. Verify every value before issue.')}
+function importEpc(){
+ function read(id){var e=$(id);return e&&String(e.value||'').trim()}
+ function readKey(key){var e=document.querySelector('[data-k="'+key+'"]');return e&&String(e.value||'').trim()}
+ var map={
+  projectName:readKey('project.name')||read('engSite'),
+  customerName:readKey('project.client'),
+  siteName:readKey('project.site')||read('engSite'),
+  state:read('engState'),capacity:read('engCapacity'),moduleTech:read('engPanelTech'),
+  moduleWp:read('engPanelW'),inverterCapacity:read('engInverter'),
+  specificYield:read('engAep'),cuf:read('engCuf'),roofArea:read('engRoof'),
+  tiltAzimuth:(read('engTilt')?read('engTilt')+'° tilt':'')+(read('engAzimuth')?' / '+read('engAzimuth')+'° azimuth':''),
+  moduleQty:''
+ };
+ var wp=parseFloat(map.moduleWp),kw=parseFloat(map.capacity);
+ if(isFinite(wp)&&wp>0&&isFinite(kw)&&kw>0)map.moduleQty=String(Math.ceil(kw*1000/wp));
+ var annual=isFinite(kw)&&kw>0&&isFinite(parseFloat(map.specificYield))?kw*parseFloat(map.specificYield):null;
+ if(annual!=null)map.annualGeneration=String(Math.round(annual));
+ Object.keys(map).forEach(function(k){var b=$('dpr_'+k),v=map[k];if(b&&v!=null&&String(v).trim()!=='')b.value=v});
+ var lat=read('engLat'),lon=read('engLon'),co=$('dpr_coordinates');
+ if(co&&(lat||lon))co.value=[lat,lon].filter(Boolean).join(', ');
+ var ac=$('dpr_acCapacity');if(ac&&map.inverterCapacity)ac.value=map.inverterCapacity;
+ var ratio=$('dpr_dcAcRatio'),inv=parseFloat(map.inverterCapacity);
+ if(ratio&&isFinite(kw)&&kw>0&&isFinite(inv)&&inv>0)ratio.value=(kw/inv).toFixed(2)+':1';
+ cover();save();toast('EPC project, customer, site and design inputs imported. Check calculated values before issuing DPR.');
+}
 function pdf(){
  var print=$('printSheet'),d='<div id="dprPrintRoot">';
  d+='<article class="dpr-print-cover">'+coverHtml({projectName:tv('projectName'),size:nv('capacity')!=null?tv('capacity')+' kWp':'',customerName:tv('customerName'),mobile:tv('mobile'),address:tv('address')},true)+'</article>';
