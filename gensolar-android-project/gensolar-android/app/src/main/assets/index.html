@@ -843,22 +843,13 @@ html,body{margin:0;height:100%;background:#fff}
           </div>
           <p class="epca-note">Obstacle area is deducted from the available area only. Mark exact obstacle positions in a surveyed CAD drawing.</p>
         </div>
-        <div class="epca-card">
-          <h3>3. Electrical screening inputs</h3>
-          <div class="epca-fields">
-            <label>Inverter AC capacity (kW)<input id="epca_inverter" type="number" min="0" step="0.1" placeholder="Enter planned AC capacity"></label>
-            <label>Inverter maximum DC voltage (V)<input id="epca_max_dc" type="number" min="0" step="10" value="1100"></label>
-            <label>Module Voc (V)<input id="epca_voc" type="number" min="0" step="0.1" value="49.5"></label>
-            <label>Voc temperature coefficient (%/°C)<input id="epca_voc_coeff" type="number" max="0" step="0.01" value="-0.27"></label>
-            <label>Minimum design temperature (°C)<input id="epca_min_temp" type="number" step="1" value="5"></label>
-            <label>DC cable route one-way (m)<input id="epca_dc_route" type="number" min="0" step="1" value="30"></label>
-            <label>AC cable route one-way (m)<input id="epca_ac_route" type="number" min="0" step="1" value="25"></label>
-            <label>Cable route allowance (%)<input id="epca_allowance" type="number" min="0" max="50" step="1" value="10"></label>
-          </div>
-          <p class="epca-note">String check uses cold-corrected Voc only. MPPT window, current, cable cross-section, voltage drop and protection coordination must be completed in the existing Electrical design and verified against datasheets.</p>
+        <div hidden aria-hidden="true">
+          <input id="epca_inverter" value="20"><input id="epca_max_dc" value="1100">
+          <input id="epca_voc" value="49.5"><input id="epca_voc_coeff" value="-0.27">
+          <input id="epca_min_temp" value="5"><input id="epca_dc_route" value="30">
+          <input id="epca_ac_route" value="25"><input id="epca_allowance" value="10">
         </div>
-        <div class="epca-card">
-          <h3>4. Generate preliminary layout</h3>
+        <div class="epca-card"><h3>3. Generate preliminary layout</h3>
           <div class="epca-actions"><button type="button" class="btn" id="epca_generate">Generate panel layout &amp; calculations</button><button type="button" class="btn alt" id="epca_reset">Reset Auto Design only</button></div>
           <div id="epca_warnings" class="epca-warnings" aria-live="polite">Enter surveyed dimensions and generate a preliminary design.</div>
           <div id="epca_results" class="epca-results"></div>
@@ -866,23 +857,10 @@ html,body{margin:0;height:100%;background:#fff}
       </div>
       <div class="epca-card">
         <div class="epca-outputHead"><div><h3>5. Dimensioned panel layout preview</h3><p>Concept plan only; existing EPC Drawings tab remains the source for its detailed structure drawings.</p></div>
-          <div class="epca-actions"><button type="button" class="btn alt sm" id="epca_dxf">Export DXF layout</button><button type="button" class="btn alt sm" id="epca_bom">Export preliminary BOM / cable CSV</button><button type="button" class="btn alt sm" id="epca_sld">Export SLD draft</button><button type="button" class="btn alt sm" id="epca_printBtn">Print Auto Design summary</button></div>
+          <div class="epca-actions"><button type="button" class="btn alt sm" id="epca_dxf">Export DXF layout</button><button type="button" class="btn alt sm" id="epca_bom">Export preliminary BOM / cable CSV</button><button type="button" class="btn alt sm" id="epca_printBtn">Print Auto Design summary</button></div>
         </div>
         <div id="epca_layout" class="epca-layout"><div class="epca-empty">Your concept panel arrangement will appear here after generation.</div></div>
         <div id="epca_schedule" class="epca-schedule"></div>
-      </div>
-      <div class="epca-card">
-        <h3>6. Engineering approval checklist</h3>
-        <div class="epca-checks">
-          <label><input type="checkbox"> Site boundary and dimensions physically surveyed</label>
-          <label><input type="checkbox"> Shading, obstacles and seasonal sun path verified</label>
-          <label><input type="checkbox"> Roof structure / foundations and wind loads approved</label>
-          <label><input type="checkbox"> Module and inverter datasheets and string limits checked</label>
-          <label><input type="checkbox"> Cable sizing, voltage drop and protection coordinated</label>
-          <label><input type="checkbox"> Earthing, lightning protection and DISCOM requirements checked</label>
-          <label><input type="checkbox"> Final drawings reviewed by qualified project engineer</label>
-        </div>
-        <p class="epca-note epca-warning">All Auto Design outputs are preliminary. Do not use them as construction-release drawings or certified structural / electrical calculations.</p>
       </div>
       <div id="epca_print" class="epca-print"></div>
     </div>

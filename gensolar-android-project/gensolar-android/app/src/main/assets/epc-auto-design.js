@@ -94,11 +94,6 @@
       metric('Row pitch',fmt(pitch,2)+' m','Tilt and sun-altitude estimate'),
       metric('Mounting rail lines',fmt(railLines,0),'Concept estimate; verify mounting system'),
       metric('Support points',fmt(supports,0),'Based on entered support span'),
-      metric('DC / AC ratio',inv?fmt(ratio,2)+':1':'Not entered','Preliminary only'),
-      metric('Max modules / string',maxSeries?fmt(maxSeries,0):'Check inputs','Cold-corrected Voc only'),
-      metric('Estimated strings',strings?fmt(strings,0):'Not available','MPPT/current design still required'),
-      metric('DC cable pair',fmt(dcCable,1)+' m','Route × 2 × allowance'),
-      metric('3-phase AC conductors',fmt(acCable,1)+' m','Route × 3 × allowance')
     ].join('');
     $('epca_layout').innerHTML=makeLayout(installed,cols,rows,panelW,projected,pitch);
     var table='<table><thead><tr><th>Item</th><th>Preliminary quantity</th><th>Specification / notes</th></tr></thead><tbody>'+
@@ -106,9 +101,7 @@
       '<tr><td>Mounting rail lines</td><td>'+railLines+' Nos</td><td>Concept only; check module clamp zones and wind loads</td></tr>'+
       '<tr><td>Support points</td><td>'+supports+' Nos</td><td>Support span assumption; structural sizing not included</td></tr>'+
       '<tr><td>DC cable pair</td><td>'+fmt(dcCable,1)+' m</td><td>Length estimate only; conductor size not selected</td></tr>'+
-      '<tr><td>AC phase conductors</td><td>'+fmt(acCable,1)+' m</td><td>3-phase route estimate; PE and neutral separate</td></tr>'+
-      '<tr><td>String voltage screen</td><td>'+maxSeries+' modules/string max</td><td>Cold Voc '+fmt(coldVoc,2)+' V; MPPT window and current to verify</td></tr>'+
-      '<tr><td>Estimated strings</td><td>'+strings+'</td><td>Final MPPT allocation to be engineered</td></tr></tbody></table>';
+      '</tbody></table>';
     $('epca_schedule').innerHTML=table;
     $('epca_warnings').textContent=warnings.length?warnings.join(' '):'Preliminary design generated. Verify all inputs and engineering constraints before issue for construction.';
     last={project:$('epca_project').value,segment:$('epca_segment').value,mode:mode,lat:val('epca_lat'),lon:val('epca_lon'),kw:kw,wp:wp,modules:installed,actualKw:actualKw,moduleW:mw,moduleL:ml,orientation:$('epca_orientation').value,siteLength:len,siteWidth:wid,tilt:tilt,azimuth:val('epca_azimuth'),cols:cols,rows:rows,pitch:pitch,panelW:panelW,panelDepth:projected,railLines:railLines,supports:supports,maxSeries:maxSeries,strings:strings,coldVoc:coldVoc,dcCable:dcCable,acCable:acCable,inv:inv,ratio:ratio,allowance:val('epca_allowance'),setback:setback,walkway:walk,warnings:warnings,area:usableArea,panelArea:panelArea};
@@ -152,7 +145,6 @@
   $('epca_media').addEventListener('change',function(e){var box=$('epca_mediaPreview');mediaUrls.forEach(function(u){URL.revokeObjectURL(u)});mediaUrls=[];box.innerHTML='';Array.prototype.forEach.call(e.target.files||[],function(file){var url=URL.createObjectURL(file);mediaUrls.push(url);var el;if(file.type.indexOf('video/')===0){el=document.createElement('video');el.controls=true}else if(file.type.indexOf('image/')===0){el=document.createElement('img');el.alt=file.name}else return;el.src=url;el.title=file.name;box.appendChild(el)});if(!box.children.length)box.textContent='No site media selected';notify('Site media preview ready. Files remain on this device and are not uploaded or AI-measured.')});
   $('epca_dxf').addEventListener('click',dxf);
   $('epca_bom').addEventListener('click',function(){if(!last){notify('Generate a design first.');return}download('GenSolar-EPC-Auto-BOM.csv','text/csv;charset=utf-8',csvText())});
-  $('epca_sld').addEventListener('click',sld);
   $('epca_printBtn').addEventListener('click',printReport);
   var projectSelect=$('epc_projSel');if(projectSelect)projectSelect.addEventListener('change',function(){setTimeout(load,0)});
   var nameField=$('epc_f-name');if(nameField)nameField.addEventListener('change',function(){load()});
