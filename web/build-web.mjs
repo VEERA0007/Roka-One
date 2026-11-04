@@ -34,7 +34,7 @@ if (!html.includes('</body>')) throw new Error('index.html has no </body>');
 html = html.replace('</body>', inject + '\n</body>');
 // The Android-only "Update available" bar points at the APK. The website always serves the latest build.
 html = html.replace('<title>GenSolar Pro</title>', '<title>GenSolar Pro</title>\n<link rel="icon" href="gensolar_app_icon.png">\n<link rel="manifest" href="manifest.webmanifest">\n<meta name="theme-color" content="#064e3b">\n<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-status-bar-style" content="default">');
-html = html.replace('</body>', '<script src="update-manager.js"></script>\\n</body>');
+html = html.replace('</body>', '<script src="update-manager.js"></script>\n</body>');
 writeFileSync(resolve(out, 'index.html'), html);
 writeFileSync(resolve(out, '.nojekyll'), '');
 console.log(`Built web/dist for version ${version}`);
