@@ -76,6 +76,9 @@ try {
   await page.waitForTimeout(450);
   check(await page.locator('#dprPrintRoot').count() === 1 && await page.evaluate(() => !!window.__dprPrintCalled),
     'Generate DPR PDF assembles the complete printable report and invokes the print-to-PDF flow');
+  await page.locator('.tabbar button[data-tab="est"]').click();
+  check(await page.locator('#view-est').isVisible() && await page.locator('#view-dpr').isHidden(),
+    'Navigation leaves the DPR workspace cleanly and returns to the estimator');
 
   check(await page.locator('link[href="responsive.css"]').count() === 1, 'Responsive layout stylesheet is linked');
   check(await page.locator('#gsNotificationButton').count() === 1, 'Notification inbox button is mounted in the application header');
