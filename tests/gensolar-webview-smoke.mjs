@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, normalize, sep } from 'node:path';
 
 const root = resolve('gensolar-android-project/gensolar-android/app/src/main/assets');
-const mime = { '.html':'text/html; charset=utf-8', '.jpg':'image/jpeg', '.png':'image/png', '.css':'text/css' };
+const mime = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.jpg':'image/jpeg', '.png':'image/png', '.css':'text/css' };
 const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname);
@@ -62,6 +62,21 @@ try {
   await page.waitForTimeout(200);
   check(await page.locator('#app').isVisible(), 'Guest estimator workspace can still be opened');
   check(await page.locator('#view-est').isVisible(), 'Estimator view is shown for guest exploration');
+  check(await page.locator('.tabbar button[data-tab="dpr"]').count() === 1, 'DPR is added as a separate navigation tab beside EPC');
+  await page.locator('.tabbar button[data-tab="dpr"]').click();
+  check(await page.locator('#view-dpr').isVisible(), 'DPR workspace opens from its navigation tab');
+  check(await page.locator('#dpr_projectName').count() === 1 && await page.locator('#dpr_bom').count() === 1
+    && await page.locator('#dpr_internalWorkflow').count() === 1,
+    'DPR contains cover details, editable BOM/BOQ and internal workflow');
+  await page.locator('#dpr_projectName').fill('Smoke Test Solar Project');
+  check((await page.locator('#dpr_cv_project').innerText()).includes('Smoke Test Solar Project'),
+    'DPR cover page updates from the project-name field');
+  await page.evaluate(() => { window.print = () => { window.__dprPrintCalled = true; }; });
+  await page.locator('#dpr_pdf').click();
+  await page.waitForTimeout(450);
+  check(await page.locator('#dprPrintRoot').count() === 1 && await page.evaluate(() => !!window.__dprPrintCalled),
+    'Generate DPR PDF assembles the complete printable report and invokes the print-to-PDF flow');
+
   check(await page.locator('link[href="responsive.css"]').count() === 1, 'Responsive layout stylesheet is linked');
   check(await page.locator('#gsNotificationButton').count() === 1, 'Notification inbox button is mounted in the application header');
   await page.evaluate(() => window.GenSolarNotifications.notify({title:'Smoke test alert',body:'Responsive notification inbox test'}));
