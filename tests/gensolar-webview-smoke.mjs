@@ -2,8 +2,15 @@ import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, normalize, sep } from 'node:path';
+import vm from 'node:vm';
 
 const root = resolve('gensolar-android-project/gensolar-android/app/src/main/assets');
+const htmlSource = await readFile(resolve(root, 'index.html'), 'utf8');
+for (const [index, match] of [...htmlSource.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)].entries()) {
+  if (/\\bsrc\\s*=/.test(match[1]) || !match[2].trim()) continue;
+  try { new vm.Script(match[2], { filename: 'index.html:inline-script-' + (index + 1) }); }
+  catch (error) { console.error('INLINE SCRIPT SYNTAX ERROR:', error.message, error.stack); throw error; }
+}
 const mime = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.jpg':'image/jpeg', '.png':'image/png', '.css':'text/css' };
 const server = createServer(async (req, res) => {
   try {
