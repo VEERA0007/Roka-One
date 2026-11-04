@@ -1693,7 +1693,7 @@ function model(p){
   window.onGenSolarAdminError=function(m){toast(m||'Something went wrong');var b=$('teamList');if(b&&b.textContent.indexOf('Loading')>-1)b.innerHTML='<p class="meta">'+esc(m||'Could not load')+'</p>'};
 
   /* ---------- in-app update check (GitHub Releases) ---------- */
-  var UPDATE_API='https://api.github.com/repos/VEERA0007/gensolar-pro/releases/tags/latest',updateUrl='';
+  var UPDATE_API='https://api.github.com/repos/VEERA0007/Roka-One/releases/tags/latest',updateUrl='';
   function verParts(v){return String(v||'0').replace(/^[^\d]*/,'').split('.').map(function(x){return parseInt(x,10)||0})}
   function verNewer(a,b){var x=verParts(a),y=verParts(b);for(var i=0;i<Math.max(x.length,y.length);i++){var p=x[i]||0,q=y[i]||0;if(p!==q)return p>q}return false}
   function checkForUpdate(){
