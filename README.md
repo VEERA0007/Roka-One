@@ -1,33 +1,122 @@
-# GenSolar Pro — Unified Platform
+# GenSolar Pro
 
-Genesis Powertronics India Pvt. Ltd. · GenSolar
+**Solar Engineering • Project Estimation • EPC • CRM**
 
-This repository is the unified destination for the existing GenSolar Pro solar application and GenSolar CRM.
+GenSolar Pro is the unified solar project and customer-management platform from **Genesis Powertronics India Pvt. Ltd.** This repository is the main source of the GenSolar Pro application, its web experience, mobile build configuration, desktop wrapper and automated workflows.
 
-## Target platforms
-- Android and iOS mobile applications
-- Responsive web application
-- Windows desktop application
-- Adaptive layouts for phones, tablets, laptops and desktops
-- In-app notifications and platform-native notifications where supported
+## Platform status
 
-## Product modules
-Solar estimator; engineering and site design; PV, inverter, battery and cable sizing; editable product library; BOM/BOQ; costing and financial analysis; customer-ready DPR and PDF/Word exports; CRM leads; follow-ups; quotations; team management; dashboards; role-based access.
+The latest main-branch CI run completed successfully for the configured platform jobs:
 
-## Source repositories
-- https://github.com/VEERA0007/gensolar-pro
-- https://github.com/VEERA0007/gensolar-crm
+| Platform / check | Latest CI result |
+| --- | --- |
+| Android APK | Passed |
+| Web build and deployment | Passed |
+| iOS Simulator build | Passed |
+| Windows desktop build | Passed |
+| WebView UI smoke tests | Passed |
 
-## Important
-The source repositories currently contain an Android WebView application and a browser build. They are not yet a complete native iOS/Windows product. Cross-platform packaging, responsive QA, notification integration, security review and production builds must be completed and tested before release.
+These results confirm that the configured automated builds and checks passed. They do not replace final testing on physical iOS/Android devices, Windows computers, or app-store release approval. The iOS job builds a Simulator target; production signing and store distribution are separate release steps.
 
-Never commit Firebase service-account credentials, signing keys, private keys, or production secrets. Configure platform-specific public Firebase app settings through deployment configuration and keep authorization in trusted backend services.
+## What GenSolar Pro includes
 
-## Unified cross-platform project
+- Solar estimation and system sizing
+- Engineering inputs and PV system design
+- Solar panels, inverters, batteries, cables and protection sizing
+- Site planning and project design tools
+- Product specifications and editable product library
+- BOM / BOQ preparation and project costing
+- Customer quotations, DPR and document/PDF workflows
+- CRM leads, assignments, follow-ups and customer management
+- Role-based experiences for customers, representatives, managers and admins
+- Dashboards, project tracking and notifications
 
-The repository now includes responsive web/PWA assets, an in-app notification inbox, Capacitor Android/iOS configuration, and a Tauri Windows desktop scaffold.
+Calculation outputs and engineering designs should be reviewed by a qualified solar/electrical professional before being used for final customer commitments or installation.
 
-- [Build and release instructions](docs/BUILD_AND_RELEASE.md)
-- [Cross-platform architecture and implementation status](docs/PLATFORM_ROADMAP.md)
+## Supported project targets
 
-The Android APK and web static site are built by GitHub Actions. Windows installer and iOS Simulator build jobs are being validated. Production signing, App Store release and cross-device push notifications are not yet configured.
+- **Android:** Android application and APK workflow
+- **Web:** Responsive web application and deployment workflow
+- **iOS:** Capacitor-based iOS Simulator build workflow
+- **Windows:** Tauri desktop build workflow
+
+Responsive layouts are intended for phones, tablets, laptops and desktop screens. Platform-specific permissions, notifications, signing and device behavior must be validated on the target device.
+
+## Repository structure
+
+```text
+.
+├── gensolar-android-project/   # Android application
+├── web/                        # Web application and PWA assets
+├── desktop/                    # Windows desktop wrapper
+├── tests/                      # Automated smoke tests
+├── docs/                       # Build, release and platform documentation
+├── capacitor.config.ts         # Capacitor configuration
+└── package.json                # Build and test scripts
+```
+
+## Build locally
+
+Requirements: Node.js 22. Platform-specific builds require the relevant SDK/toolchain.
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Build the web application and run its smoke tests:
+
+```bash
+npm run build:web
+npm run test:web
+```
+
+The generated static web application is written to `web/dist`.
+
+### Android
+
+Use the **Build GenSolar APK** workflow in GitHub Actions to build the Android APK. Repository signing secrets must be configured for a stable signing identity. Do not use temporary debug signing for production distribution.
+
+### iOS
+
+The **GenSolar Pro Cross-platform CI** workflow builds the iOS Simulator target on macOS. App Store distribution additionally requires Apple Developer signing, provisioning, capabilities, privacy declarations and review.
+
+### Windows
+
+Build the Tauri desktop package on a supported Windows environment:
+
+```bash
+npm run desktop:windows
+```
+
+See [Build and Release Guide](docs/BUILD_AND_RELEASE.md) for complete instructions.
+
+## GitHub Actions
+
+The repository includes workflows for:
+
+- Android APK builds and release artifacts
+- Web build and deployment
+- Cross-platform web, iOS Simulator and Windows CI
+- Android WebView/browser UI smoke tests
+
+Open the [Actions tab](https://github.com/VEERA0007/Roka-One/actions) to view current run results and downloadable artifacts.
+
+## Documentation
+
+- [Build and Release Guide](docs/BUILD_AND_RELEASE.md)
+- [Cross-platform Architecture and Roadmap](docs/PLATFORM_ROADMAP.md)
+
+## Security
+
+- Never commit Firebase service-account files, private keys, keystores, signing passwords, access tokens or other secrets.
+- Store signing credentials in protected GitHub Actions secrets.
+- Enforce authentication, organization membership and role permissions through Firebase Security Rules and trusted backend services.
+- Do not rely on client-side role checks as the only access-control mechanism.
+
+## Project
+
+**GenSolar Pro**  
+Genesis Powertronics India Pvt. Ltd.  
+Repository: [VEERA0007/Roka-One](https://github.com/VEERA0007/Roka-One)
