@@ -87,3 +87,5 @@ jobs:
             --title "GenSolar Pro v${APK_VERSION} (latest build)" \
             --notes "Debug APK built from commit ${GITHUB_SHA::7}. Download the .apk file below on your phone and open it to install." \
             --target "${GITHUB_SHA}"
+
+# Trigger a fresh APK build from the merged main branch.
