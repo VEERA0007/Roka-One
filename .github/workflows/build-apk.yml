@@ -2,6 +2,9 @@ name: Build GenSolar APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -22,7 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PROJECT_DIR: gensolar-android-project/gensolar-android
-      GH_RELEASE_TOKEN: ${{ secrets.GENSOLAR_RELEASE_TOKEN }}
 
     steps:
       - name: Checkout source
@@ -47,13 +49,16 @@ jobs:
           test -f app/src/main/assets/index.html
           echo "Android project files found."
 
-      - name: Prepare ephemeral debug signing key
+      - name: Prepare debug signing key (use persistent repository secret)
         working-directory: ${{ env.PROJECT_DIR }}/app
         run: |
           if [ -n "${DEBUG_KEYSTORE_BASE64:-}" ]; then
             echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > debug.keystore
+          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=GenSolar PR Test,O=Android,C=US"
           else
-            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            echo "::error::Set the repository Actions secret GENSOLAR_DEBUG_KEYSTORE_BASE64 before publishing releases. A changing debug key prevents Android in-place updates."
+            exit 1
           fi
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.GENSOLAR_DEBUG_KEYSTORE_BASE64 }}
@@ -78,9 +83,9 @@ jobs:
           retention-days: 14
 
       - name: Publish APK to the Releases page
-        if: ${{ env.GH_RELEASE_TOKEN != '' }}
+        if: ${{ github.event_name != 'pull_request' }}
         env:
-          GH_TOKEN: ${{ env.GH_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --cleanup-tag --yes || true
           gh release create latest "${APK_FILE}" \
