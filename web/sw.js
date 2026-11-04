@@ -1,4 +1,4 @@
-const CACHE='gensolar-pro-shell-v1';
+const CACHE='gensolar-pro-shell-__VERSION__';
 const CORE=['./','./index.html','./responsive.css','./notification-center.js','./firebase-config.js','./web-shim.js','./gensolar_app_icon.png','./logo-banner.png','./logo-banner.svg'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
