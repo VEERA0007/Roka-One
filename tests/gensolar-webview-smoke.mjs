@@ -156,9 +156,9 @@ try {
   check(await page.locator('#gsCadFile').count() === 1, 'Site Survey CAD workspace is loaded inside Auto Design');
   await page.locator('#gs3dBuild').click();
   check(await page.locator('#gs3dViewer svg').count() === 1, 'Site Survey generates an interactive conceptual 3D building and solar model');
-  await page.locator('#gsCadFile').setInputFiles({name:'survey-test.dxf',mimeType:'application/dxf',buffer:Buffer.from('0\\nSECTION\\n2\\nENTITIES\\n0\\nLINE\\n10\\n0\\n20\\n0\\n11\\n40\\n21\\n0\\n0\\nLINE\\n10\\n40\\n20\\n0\\n11\\n40\\n21\\n20\\n0\\nENDSEC\\n0\\nEOF\\n')});
+  await page.locator('#gsCadFile').setInputFiles({name:'survey-test.dxf',mimeType:'application/dxf',buffer:Buffer.from('0\nSECTION\n2\nENTITIES\n0\nLINE\n10\n0\n20\n0\n11\n40\n21\n0\n0\nLINE\n10\n40\n20\n0\n11\n40\n21\n20\n0\nENDSEC\n0\nEOF\n')});
   check((await page.locator('#gsCadStatus').innerText()).includes('2 supported entities parsed'), 'DXF import parses common 2D LINE entities and displays a drawing preview');
-  await page.locator('#gsCadFile').setInputFiles({name:'reference.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4\\n%mock')});
+  await page.locator('#gsCadFile').setInputFiles({name:'reference.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4\n%mock')});
   check((await page.locator('#gsCadStatus').innerText()).includes('reference underlay'), 'PDF site drawings are accepted as reference underlays');
   await page.locator('#gsCadFile').setInputFiles({name:'reference.dwg',mimeType:'application/acad',buffer:Buffer.from('DWG')});
   check((await page.locator('#gsCadStatus').innerText()).includes('DWG accepted'), 'DWG files are recognized and explain the required DXF conversion step');
