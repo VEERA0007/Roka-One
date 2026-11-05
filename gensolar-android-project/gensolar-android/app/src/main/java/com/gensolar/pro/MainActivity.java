@@ -739,6 +739,35 @@ public class MainActivity extends Activity {
                 catch (Exception e) { Toast.makeText(MainActivity.this, "Could not open the website", Toast.LENGTH_LONG).show(); }
             });
         }
+        @JavascriptInterface public void saveFile(String name, String mime, String base64) {
+            new Thread(() -> {
+                try {
+                    byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+                    String safe = name.replaceAll("[^A-Za-z0-9._ -]", "_");
+                    String where;
+                    if (Build.VERSION.SDK_INT >= 29) {
+                        android.content.ContentValues values = new android.content.ContentValues();
+                        values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, safe);
+                        values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime);
+                        values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/GenSolar");
+                        Uri uri = getContentResolver().insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                        if (uri == null) throw new java.io.IOException("insert failed");
+                        try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) { os.write(data); }
+                        where = "Downloads/GenSolar";
+                    } else {
+                        java.io.File dir = new java.io.File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "GenSolar");
+                        dir.mkdirs();
+                        java.io.File out = new java.io.File(dir, safe);
+                        try (java.io.FileOutputStream os = new java.io.FileOutputStream(out)) { os.write(data); }
+                        where = dir.getAbsolutePath();
+                    }
+                    final String msg = "Saved " + safe + " to " + where;
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show());
+                } catch (Exception e) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Could not save the file", Toast.LENGTH_LONG).show());
+                }
+            }).start();
+        }
         @JavascriptInterface public void printPdfLandscape() {
             runOnUiThread(() -> {
                 try {

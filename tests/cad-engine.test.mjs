@@ -1,0 +1,23 @@
+import { createRequire } from 'node:module';
+import assert from 'node:assert/strict';
+const require = createRequire(import.meta.url);
+const root = 'gensolar-android-project/gensolar-android/app/src/main/assets/';
+const E = require('../' + root + 'cad-engine.js');
+const D = require('../' + root + 'cad-draw.js');
+const cfg = { levels: [{ name: 'Main', x: 0, y: 0, l: 20, w: 26, z: 12 }, { name: 'Tower', x: 13, y: 1, l: 6, w: 8, z: 15 }],
+  blocks: [{ name: 'A', level: 0, x: 0.8, y: 15.6, cols: 15, rows: 4, trim: 2, tilt: 10, lowH: 2.4 }, { name: 'C', level: 1, x: 13.8, y: 1.8, cols: 3, rows: 3, tilt: 10, lowH: 1 }] };
+const m = E.build(cfg);
+assert.equal(m.totals.modules, 67, 'module count (15x4-2 + 3x3)');
+assert.ok(Math.abs(m.totals.kwp - 36.85) < 1e-6, 'kWp');
+assert.ok(m.yield.specific > 1350 && m.yield.specific < 1750, 'specific yield plausible: ' + m.yield.specific);
+const sp = E.solarPos(17.385, 80, 12); assert.ok(Math.abs(sp.alt - 72.6) < 1.5, 'equinox noon altitude');
+assert.ok(m.elec.strings.every(s => s.len >= m.elec.nmin && s.len <= m.elec.nmax), 'strings within MPPT window');
+assert.ok(m.elec.strings.reduce((n, s) => n + s.len, 0) === 67, 'every module is in a string');
+assert.ok(m.geoms.every(g => g.members.length > 0 && g.foots.length === g.columns.length));
+const auto = E.autoLayout({ levels: [{ name: 'R', x: 0, y: 0, l: 20, w: 14, z: 12 }], auto: { target: 30, rows: 2, tilt: 15, lowH: 0.6 } });
+assert.equal(auto.unplaced, 0); assert.equal(auto.blocks.reduce((n, b) => n + b.cols * b.rows - b.trim, 0), 55);
+const dxf = D.planSheet(m).toDxf(); assert.ok(dxf.startsWith('0\nSECTION') && dxf.trim().endsWith('EOF'));
+assert.ok(D.dxf3d(m).includes('3DFACE'));
+const z = Buffer.concat(D.zip([{ name: 'a.txt', data: 'hi' }]).map(x => Buffer.from(x))); assert.equal(z.readUInt32LE(0), 0x04034b50);
+assert.ok(D.sldSheet(m).toSvg().includes('INVERTER 1'));
+console.log('cad-engine tests passed');

@@ -131,6 +131,8 @@ try {
   check(await page.locator('#epc_p-autodesign').isVisible(), 'New Auto Design is added as a separate EPC Engineering tab');
   check(await page.locator('#epc_tabs [data-t="autodesign"]').count() === 1,
     'New Auto Design tab is present without replacing the original tabs');
+  check(await page.locator('#gscs').count() === 1, 'Auto Design shows the new CAD Studio');
+  await page.evaluate(() => { document.querySelector('#epcAutoDesign details.gs-legacy').open = true; });
   await page.locator('#epca_import').click();
   check((await page.locator('#epca_project').inputValue()) === 'Existing EPC project site'
     && (await page.locator('#epca_capacity').inputValue()) === '21.26',
@@ -179,6 +181,28 @@ try {
     && await page.locator('#epc_newProj').count() === 1
     && await page.locator('#epc_loadRef').count() === 1,
     'Original EPC Save project, New and Example controls remain available');
+
+  await page.evaluate(() => { window.__saved = []; window.GenSolarNative = { saveFile: (n, m, b) => window.__saved.push([n, b.length]), printPdfLandscape: () => { window.__pages = document.querySelectorAll('#gscs_printRoot .gp').length; } }; GSCS.loadSample(); });
+  const studio = await page.evaluate(() => { const m = GSCS.getModel(); return { modules: m.totals.modules, kwp: m.totals.kwp, strings: m.elec.strings.length }; });
+  check(studio.modules === 97 && Math.abs(studio.kwp - 53.35) < 0.001 && studio.strings === 6, 'CAD Studio sample design calculates 97 modules, 53.35 kWp: ' + JSON.stringify(studio));
+  for (const t of ['summary', 'plan', 'elev', 'v3d', 'sld', 'bom', 'calc', 'media', 'export']) {
+    await page.evaluate(x => GSCS.setTab(x), t);
+    check(await page.locator('#gs_view').evaluate(el => el.innerHTML.length > 200), 'CAD Studio tab renders: ' + t);
+  }
+  await page.evaluate(() => GSCS.setTab('plan'));
+  check(await page.locator('#gs_view svg').first().evaluate(el => el.querySelectorAll('polygon').length > 100), 'Plan drawing contains the module layout');
+  await page.evaluate(() => GSCS.setTab('v3d'));
+  check(await page.locator('#gs_cv').evaluate(c => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let blue = 0; for (let i = 0; i < d.length; i += 400) if (d[i + 2] > d[i] + 40 && d[i + 2] > d[i + 1] + 20) blue++; return blue > 50; }), '3D model canvas draws solar modules');
+  await page.evaluate(() => { document.querySelector('[data-dl=plandxf]') || GSCS.setTab('export'); GSCS.setTab('export'); document.querySelector('[data-dl=plandxf]').click(); });
+  await page.waitForTimeout(400);
+  check(await page.evaluate(() => window.__saved.some(x => /plan\.dxf$/.test(x[0]) && x[1] > 1000)), 'DXF export goes through the Android save bridge');
+  await page.evaluate(() => document.querySelector('[data-dl=zip]').click());
+  await page.waitForFunction(() => window.__saved.some(x => /\.zip$/.test(x[0])), null, { timeout: 30000 });
+  check(true, 'Design package ZIP is created');
+  await page.evaluate(() => document.querySelector('[data-dl=pdf]').click());
+  await page.waitForFunction(() => window.__pages > 0, null, { timeout: 30000 });
+  check(await page.evaluate(() => window.__pages >= 8), 'PDF report builds at least 8 landscape pages');
+  await page.evaluate(() => document.body.classList.remove('gscs-printing'));
 
   check(errors.length === 0, 'No uncaught JavaScript errors: ' + (errors.join(' | ') || 'none'));
 } finally {
