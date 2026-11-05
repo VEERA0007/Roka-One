@@ -14,7 +14,7 @@
   function notify(msg){var el=document.getElementById('toast');if(el){el.textContent=msg;el.hidden=false;clearTimeout(el._epcaTimer);el._epcaTimer=setTimeout(function(){el.hidden=true},2600)}else if(window.console)console.info(msg)}
   function projectKey(){var p=$('epc_projSel'),n=$('epc_f-name'),s=$('engSite');return (p&&p.value)||(n&&n.value)||(s&&s.value)||'default'}
   function allDesigns(){try{return JSON.parse(localStorage.getItem('gs_epc_auto_designs_v1')||'{}')}catch(e){return {}}}
-  function save(){var all=allDesigns(),data={mode:mode};ids.forEach(function(id){if($(id))data[id]=$(id).value});all[projectKey()]=data;try{localStorage.setItem('gs_epc_auto_designs_v1',JSON.stringify(all))}catch(e){}}
+  function save(){var all=allDesigns(),data={mode:mode,_manual:manual||{}};ids.forEach(function(id){if($(id))data[id]=$(id).value});all[projectKey()]=data;try{localStorage.setItem('gs_epc_auto_designs_v1',JSON.stringify(all))}catch(e){}}
   function setMode(m){mode=m;root.querySelectorAll('[data-epca-mode]').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-epca-mode')===mode)});$('epca_modeLabel').textContent=mode==='ground'?'Ground-mounted':'Rooftop';if($('epca_mount'))$('epca_mount').value=mode==='ground'?'ground':($('epca_mount').value==='ground'?'rooftop':$('epca_mount').value)}
   function prefill(force){
     var map=[['engSite','epca_project'],['engCapacity','epca_capacity'],['engPanelW','epca_wp'],['engLat','epca_lat'],['engLon','epca_lon'],['engTilt','epca_tilt'],['engAzimuth','epca_azimuth'],['engInverter','epca_inverter']];
@@ -32,10 +32,13 @@
   }
   function load(){
     var data=allDesigns()[projectKey()];
-    if(data){ids.forEach(function(id){if(data[id]!=null&&$(id))$(id).value=data[id]});if(data.mode)setMode(data.mode)}
+    manual={};
+    if(data){ids.forEach(function(id){if(data[id]!=null&&$(id))$(id).value=data[id]});if(data.mode)setMode(data.mode);if(data._manual&&typeof data._manual==='object')manual=data._manual}
     else prefill(false);
     if(!$('epca_project').value)prefill(false);
     setMode(mode);
+    if(typeof pullAll==='function')pullAll();
+    if(typeof scheduleGenerate==='function')scheduleGenerate();
   }
   function metric(name,value,detail){return '<div class="epca-metric"><span>'+esc(name)+'</span><b>'+esc(value)+'</b><small>'+esc(detail||'')+'</small></div>'}
   function makeLayout(installed,cols,rows,panelW,panelDepth,pitch,scaleData){
@@ -70,8 +73,11 @@
     var cols=wid>0?Math.max(0,Math.floor(usableW/panelW)):0,rowsAvail=len>0?Math.max(0,Math.floor(usableL/pitch)):0;
     var panelArea=mw*ml,usableArea=Math.max(0,usableW*usableL-val('epca_obstacles')),areaFit=Math.floor(usableArea/panelArea);
     var geometricFit=cols*rowsAvail,fit=(len>0&&wid>0)?Math.min(geometricFit,areaFit):target;
+    var siteRoof=document.getElementById('engRoof'),roofM2=siteRoof?parseFloat(siteRoof.value)*0.092903:0,roofBased=false;
+    if(!(len>0&&wid>0)&&roofM2>0){fit=Math.floor(Math.max(0,roofM2-val('epca_obstacles'))/(panelW*pitch));roofBased=true}
     var installed=Math.min(target,fit),rows=cols>0?Math.ceil(installed/cols):0,actualKw=installed*wp/1000;
-    if(!(len>0&&wid>0))warnings.push('Enter surveyed site length and width to calculate fit and generate a scaled layout.');
+    if(roofBased)warnings.push('Fit is estimated from the usable roof area on the Site tab ('+fmt(roofM2,1)+' m²). Enter surveyed length and width for a scaled layout.');
+    else if(!(len>0&&wid>0))warnings.push('Enter surveyed site length and width to calculate fit and generate a scaled layout.');
     if(installed<target)warnings.push('The entered area fits '+installed+' of '+target+' target modules. Review setbacks, walkways, obstacles or system capacity.');
     if(val('epca_obstacles')>0)warnings.push('Excluded obstacle area is deducted from available area; obstacle positions are not automatically detected. Mark their exact locations in CAD.');
     if(!val('epca_lat')||!val('epca_lon'))warnings.push('Add verified site coordinates for a site-specific solar resource and shadow assessment.');
@@ -137,8 +143,63 @@
   }
   root.querySelectorAll('[data-epca-mode]').forEach(function(b){b.addEventListener('click',function(){setMode(b.getAttribute('data-epca-mode'));save()})});
   $('epca_mount').addEventListener('change',function(){setMode(this.value==='ground'?'ground':'rooftop');save()});
-  ids.forEach(function(id){if($(id)){$(id).addEventListener('input',save);$(id).addEventListener('change',save)}});
-  $('epca_import').addEventListener('click',function(){prefill(true);save();notify('Inputs copied from the existing EPC Site and Layout screens.')});
+  /* ---- live calculation and cross-tab linking ----
+     Fields that mirror another EPC tab follow that tab until the user edits them here.
+     An edited field is remembered as "manual" and Re-link clears that. */
+  var manual={},genTimer=null;
+  function scheduleGenerate(){clearTimeout(genTimer);genTimer=setTimeout(function(){try{generate()}catch(e){if(window.console)console.error(e)}},200)}
+  function mountKind(t){t=String(t||'').toLowerCase();return t.indexOf('ground')>=0?'ground':(t.indexOf('metal')>=0?'metal':'rooftop')}
+  function autoSunAlt(lat){var d=(lat>=0?-23.45:23.45)*Math.PI/180,p=lat*Math.PI/180,s=Math.sin(p)*Math.sin(d)+Math.cos(p)*Math.cos(d)*Math.cos(Math.PI/4);return Math.round(Math.asin(Math.max(-1,Math.min(1,s)))*180/Math.PI)}
+  var plain=function(v){return v};
+  var LINKS=[
+    {to:'epca_project',from:'#engSite',get:plain},
+    {to:'epca_lat',from:'#engLat',get:plain},
+    {to:'epca_lon',from:'#engLon',get:plain},
+    {to:'epca_capacity',from:'#engCapacity',get:plain},
+    {to:'epca_wp',from:'#engPanelW',get:plain},
+    {to:'epca_wp',from:'[data-k="module.wp"]',get:plain},
+    {to:'epca_module_l',from:'[data-k="module.len"]',get:function(v){return(parseFloat(v)/1000).toFixed(3)}},
+    {to:'epca_module_w',from:'[data-k="module.wid"]',get:function(v){return(parseFloat(v)/1000).toFixed(3)}},
+    {to:'epca_orientation',from:'[data-k="module.orient"]',get:plain},
+    {to:'epca_tilt',from:'#engTilt',get:plain},
+    {to:'epca_azimuth',from:'#engAzimuth',get:plain},
+    {to:'epca_inverter',from:'#engInverter',get:plain},
+    {to:'epca_mount',from:'#engMount',get:mountKind},
+    {to:'epca_voc',from:'[data-x="elec.voc"]',get:plain},
+    {to:'epca_voc_coeff',from:'[data-x="elec.tcVoc"]',get:plain},
+    {to:'epca_min_temp',from:'[data-x="elec.tmin"]',get:plain},
+    {to:'epca_max_dc',from:'[data-x="elec.invVmax"]',get:plain},
+    {to:'epca_dc_route',from:'[data-x="elec.cableLen"]',get:plain},
+    {to:'epca_ac_route',from:'[data-x="elec.acLen"]',get:plain}
+  ];
+  var LINKED=['epca_sun_alt'];LINKS.forEach(function(l){if(LINKED.indexOf(l.to)<0)LINKED.push(l.to)});
+  function pushLink(l,src){
+    if(manual[l.to])return false;
+    var raw=src.value;if(raw===''||raw==null)return false;
+    var v=l.get(raw),t=$(l.to);if(v==null||v===''||(typeof v==='number'&&!isFinite(v))||v==='NaN'||!t)return false;
+    if(String(t.value)===String(v))return false;
+    t.value=v;if(l.to==='epca_mount')setMode(v==='ground'?'ground':'rooftop');return true;
+  }
+  function pullAll(){
+    LINKS.forEach(function(l){var src=document.querySelector(l.from);if(src)pushLink(l,src)});
+    syncSun();
+  }
+  function syncSun(){var lat=val('epca_lat');if(!manual.epca_sun_alt&&$('epca_lat').value!==''&&lat>=-60&&lat<=60){var a=autoSunAlt(lat);if(a>=5&&a<=85)$('epca_sun_alt').value=a}}
+  var scope=root.closest('#epcRoot')||document;
+  function onSource(e){
+    var el=e.target,changed=false;if(!el||!el.closest)return;
+    LINKS.forEach(function(l){var hit=el.closest(l.from);if(hit&&pushLink(l,hit))changed=true});
+    if(changed){syncSun();save()}
+    if(changed||el.closest('#engRoof'))scheduleGenerate();
+  }
+  document.addEventListener('input',onSource);document.addEventListener('change',onSource);
+  ids.forEach(function(id){var el=$(id);if(!el)return;
+    function onOwn(e){if(e&&e.isTrusted&&LINKED.indexOf(id)>=0&&root.contains(el)&&document.activeElement===el)manual[id]=true;if(id==='epca_lat')syncSun();save();scheduleGenerate()}
+    el.addEventListener('input',onOwn);el.addEventListener('change',onOwn);
+  });
+  $('epca_import').textContent='Re-link to Site, Layout & Electrical';
+  $('epca_import').addEventListener('click',function(){manual={};pullAll();save();scheduleGenerate();notify('Auto Design now follows the Site, Layout and Electrical tabs again.')});
+  $('epca_generate').textContent='Recalculate now';
   $('epca_generate').addEventListener('click',generate);
   $('epca_reset').addEventListener('click',function(){if(!confirm('Reset only Auto Design inputs for this EPC project? Existing EPC project data will not be changed.'))return;var all=allDesigns();delete all[projectKey()];localStorage.setItem('gs_epc_auto_designs_v1',JSON.stringify(all));ids.forEach(function(id){if($(id))$(id).value=$(id).defaultValue});last=null;$('epca_results').innerHTML='';$('epca_layout').innerHTML='<div class="epca-empty">Generate a design to preview the panel layout.</div>';$('epca_schedule').innerHTML='';$('epca_warnings').textContent='Auto Design inputs reset. Existing EPC data is untouched.';setMode('rooftop')});
   $('epca_map').addEventListener('click',function(){var lat=val('epca_lat'),lon=val('epca_lon');if(!lat||!lon){notify('Enter latitude and longitude first.');return}window.open('https://www.google.com/maps?q='+encodeURIComponent(lat+','+lon),'_blank')});
