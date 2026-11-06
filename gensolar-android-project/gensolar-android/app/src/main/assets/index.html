@@ -593,6 +593,7 @@ html,body{margin:0;height:100%;background:#fff}
             <button class="tab" role="tab" data-t="site" aria-selected="true">Site</button>
             <button class="tab" role="tab" data-t="autodesign" aria-selected="false">Auto Design</button>
             <button class="tab" role="tab" data-t="layout" aria-selected="false">Layout</button>
+            <button class="tab" role="tab" data-t="wind" aria-selected="false">Wind &amp; Structure</button>
             <button class="tab" role="tab" data-t="draw" aria-selected="false">Drawings</button>
             <button class="tab" role="tab" data-t="elec" aria-selected="false">Electrical</button>
             <button class="tab" role="tab" data-t="bom" aria-selected="false">BOM</button>
@@ -785,6 +786,7 @@ html,body{margin:0;height:100%;background:#fff}
     <div class="ep-note" id="epc_docsCount" style="margin-bottom:10px"></div>
     <div class="checks" id="epc_docsList"></div>
   </section>
+  <section id="epc_p-wind" hidden aria-label="EPC Wind and Structure"></section>
   <section id="epc_p-autodesign" hidden aria-label="EPC Auto Design">
     <div id="epcAutoDesign">
       <div class="epca-head">
@@ -1933,7 +1935,7 @@ g('tabs').addEventListener('click',function(e){
   var t=e.target.getAttribute&&e.target.getAttribute('data-t');if(!t)return;
   tab=t;
   root.querySelectorAll('.tab').forEach(function(b){b.setAttribute('aria-selected',b.getAttribute('data-t')===t?'true':'false')});
-  ['site','layout','draw','elec','bom','docs','autodesign'].forEach(function(k){g('p-'+k).hidden=(k!==t)});
+  ['site','layout','wind','draw','elec','bom','docs','autodesign'].forEach(function(k){g('p-'+k).hidden=(k!==t)});
 });
 function chips(){
   var h=S.blocks.map(function(b,i){return '<button class="ep-chip" data-sel="'+i+'" aria-pressed="'+(i===sel)+'">'+esc(b.name||('Block '+(i+1)))+'</button>'}).join('');
@@ -2492,6 +2494,7 @@ bindInputs();renderBlocks();render();
 <script src="epc-auto-design.js" defer></script>
 <script src="epc-sync.js" defer></script>
 <script src="epc-shadow.js" defer></script>
+<script src="epc-wind.js" defer></script>
 <script src="site-survey-design.js" defer></script>
 <script src="dpr-module.js" defer></script>
 <script src="notification-center.js" defer></script>
