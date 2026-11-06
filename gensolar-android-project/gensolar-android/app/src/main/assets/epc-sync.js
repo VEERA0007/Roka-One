@@ -93,11 +93,11 @@
   /* ---- live design check ---- */
   var qa=null;
   function mountQA(){
-    if(qa)return qa;var host=q('#epc_hdrProject');if(!host||!host.parentNode)return null;
+    if(qa)return qa;var host=q('#epc_st-eng');if(!host)return null;
     qa=doc.createElement('details');qa.id='epc_qa';qa.className='epq';qa.open=true;qa.setAttribute('aria-live','polite');
     var st=doc.createElement('style');
     st.textContent='#epcRoot .epq{margin:10px 0;border:1px solid var(--line);border-radius:12px;background:var(--surface)}#epcRoot .epq>summary{cursor:pointer;padding:10px 12px;font:600 14px var(--font-body);display:flex;gap:8px;align-items:center;flex-wrap:wrap}#epcRoot .epq .epq-body{padding:0 12px 12px}#epcRoot .epq ul{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}#epcRoot .epq li{font-size:13px;line-height:1.4;display:flex;gap:8px;align-items:flex-start}#epcRoot .epq li .pill{flex:none;min-width:44px;text-align:center}#epcRoot .epq .pill.err{color:var(--bad);border-color:var(--bad)}#epcRoot .epq .pill.info{color:var(--muted)}';
-    doc.head.appendChild(st);host.parentNode.insertBefore(qa,host.nextSibling);return qa;
+    doc.head.appendChild(st);host.insertBefore(qa,host.firstChild);return qa;
   }
   function readLayout(){try{return JSON.parse(localStorage.getItem('gs_epc_v1')||'null')}catch(e){return null}}
   function val(id){var el=doc.getElementById(id);return el?num(el.value):null}
