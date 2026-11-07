@@ -120,6 +120,7 @@ try {
   });
   check(await page.locator('#epcRoot').isVisible(), 'Existing EPC workspace remains mounted and visible');
   const originalTabs = ['site','layout','draw','elec','bom','docs'];
+  const gatedTabs = ['autodesign','layout','wind','draw','elec','bom','docs'];
   for (const tab of originalTabs) {
     check(await page.locator('#epc_tabs [data-t="' + tab + '"]').count() === 1,
       'Original EPC tab remains available: ' + tab);
@@ -128,19 +129,35 @@ try {
     && await page.locator('#epc_stages [data-st="proc"]').count() === 1
     && await page.locator('#epc_stages [data-st="cons"]').count() === 1,
     'Original Engineering, Procurement and Construction stages remain available');
+  check(await page.locator('#epc_tabs [data-t="wind"]').count() === 1 && await page.locator('#epc_map').count() === 1,
+    'Wind & Structure tab and Site map are present in Engineering');
+  for (const tab of gatedTabs) {
+    check((await page.locator('#epc_tabs [data-t="' + tab + '"]').getAttribute('data-locked')) === '1',
+      'Step is locked until required inputs are entered: ' + tab);
+  }
+  await page.locator('#epc_tabs [data-t="autodesign"]').click({ force: true });
+  check(await page.locator('#epc_gate').isVisible() && !(await page.locator('#epc_p-autodesign').isVisible()),
+    'Clicking a locked step shows the missing inputs and does not open it');
   await page.locator('#engSite').fill('Existing EPC project site');
+  await page.locator('#engLat').fill('17.385');
+  await page.locator('#engLon').fill('78.4867');
   await page.locator('#engCapacity').fill('21.26');
+  await page.locator('#engRoof').fill('2500');
+  await page.waitForTimeout(500);
+  check((await page.locator('#epc_tabs [data-t="autodesign"]').getAttribute('data-locked')) === null
+    && (await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === '1',
+    'Site inputs unlock Auto Design, Layout and Wind & Structure but not Drawings');
   await page.locator('#epc_tabs [data-t="autodesign"]').click();
   check(await page.locator('#epc_p-autodesign').isVisible(), 'New Auto Design is added as a separate EPC Engineering tab');
   check(await page.locator('#epc_tabs [data-t="autodesign"]').count() === 1,
     'New Auto Design tab is present without replacing the original tabs');
-  await page.locator('#epca_import').click();
+  await page.locator('.epca-shared').evaluate(el => { el.open = true; });
   check((await page.locator('#epca_project').inputValue()) === 'Existing EPC project site'
     && (await page.locator('#epca_capacity').inputValue()) === '21.26',
-    'Auto Design can import existing EPC Site values on request');
+    'Auto Design shares the existing EPC Site values automatically');
   check((await page.locator('#engSite').inputValue()) === 'Existing EPC project site'
     && (await page.locator('#engCapacity').inputValue()) === '21.26',
-    'Import does not modify existing EPC Site inputs');
+    'Sharing does not alter the existing EPC Site inputs');
   await page.locator('#epca_capacity').fill('20');
   await page.locator('#epca_wp').fill('615');
   await page.locator('#epca_module_w').fill('1.038');
@@ -173,10 +190,22 @@ try {
   await page.locator('#epca_generate').click();
   check(await page.locator('#epca_layout svg').count() === 1,
     'Ground-mounted mode also generates a panel layout');
+  await page.evaluate(() => {
+    const v = {h:12,parapet:1,terrain:'2',roofType:'RCC roof',Vb:44,k1:1,k2:1,k3:1,k4:1,Kd:.9,Ka:1,Kc:1,cUpF:1,cUpE:1.5,cDn:.8,modKg:27.5,strKn:.1,llKn:.5,nPur:2,fy:250,lim:180,pb:50,ph:100,pt:3,rb:50,rh:120,rt:4,nb:4,tcap:40,vcap:30};
+    Object.keys(v).forEach(k => { const e = document.getElementById('epcw_' + k); e.value = v[k]; e.dispatchEvent(new Event('input', { bubbles: true })); });
+    const c = document.getElementById('epcw_survey'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(800);
+  check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === null,
+    'Drawings, Electrical, BOM and Documents unlock once Wind & Structure checks pass');
   for (const tab of originalTabs) {
     await page.locator('#epc_tabs [data-t="' + tab + '"]').click();
     check(await page.locator('#epc_p-' + tab).isVisible(),
       'Original EPC tab still opens after Auto Design use: ' + tab);
+  }
+  for (const st of ['proc', 'cons']) {
+    await page.locator('#epc_stages [data-st="' + st + '"]').click();
+    check(await page.locator('#epc_st-' + st).isVisible(), 'Stage is not gated: ' + st);
   }
   check(await page.locator('#epc_saveProj').count() === 1
     && await page.locator('#epc_newProj').count() === 1
