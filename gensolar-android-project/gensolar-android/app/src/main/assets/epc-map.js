@@ -51,7 +51,7 @@
   window.EPCMapGeo={polyStats:polyStats,radii:radii,wx:wx,wy:wy,lonOf:lonOf,latOf:latOf,SQFT:SQFT};
 
   /* ---------- state ---------- */
-  var S={pin:null,areas:[],obst:[],view:{lat:17.385,lon:78.4867,z:5}},draft=[],mode='pin',syncing=false,box,svg,tiles,els={},tileMap={},W=300,H=320,clearArm=0,statusT=null;
+  var layers=[],S={pin:null,areas:[],obst:[],view:{lat:17.385,lon:78.4867,z:5}},draft=[],mode='pin',syncing=false,box,svg,tiles,els={},tileMap={},W=300,H=320,clearArm=0,statusT=null;
   function $(id){return document.getElementById(id)}
   function f(x,d){return isFinite(x)?x.toFixed(d):'–'}
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -122,6 +122,7 @@
       h+='<polyline points="'+ptsAttr(draft)+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-dasharray="6 4"/>';
       draft.forEach(function(q,i){var s=scr(q[0],q[1]);h+='<circle cx="'+s[0].toFixed(1)+'" cy="'+s[1].toFixed(1)+'" r="'+(i===0?6:4)+'" fill="'+(i===0?col:'#fff')+'" stroke="'+col+'" stroke-width="2"/>'});
     }
+    layers.forEach(function(fn){try{h+=fn(scr)||''}catch(e){}});
     if(S.pin){var s=scr(S.pin.lat,S.pin.lon);
       h+='<g transform="translate('+s[0].toFixed(1)+','+s[1].toFixed(1)+')"><path d="M0,0 C-9,-13 -13,-18 -13,-24 A13,13 0 1 1 13,-24 C13,-18 9,-13 0,0Z" fill="#e53935" stroke="#fff" stroke-width="2"/><circle cx="0" cy="-24" r="5" fill="#fff"/></g>'}
     svg.innerHTML=h;
@@ -150,7 +151,7 @@
     els.fin.disabled=!(drawing&&draft.length>=3);els.und.disabled=!(drawing&&draft.length>0);
     els.hint.textContent=mode==='pin'?'Tap the map to place the site pin.':(mode==='area'?'Tap the corners of the installation area, then Finish.':'Tap the corners of the obstacle, then Finish.')+(draft.length?' ('+draft.length+' points)':'');
   }
-  function refresh(){paint();results();modeUI()}
+  function refresh(){paint();results();modeUI();document.dispatchEvent(new Event('epc:map'))}
 
   /* ---------- interaction ---------- */
   function setView(lat,lon,z){S.view.lat=Math.max(-84,Math.min(84,lat));S.view.lon=((lon+540)%360)-180;S.view.z=Math.max(MINZ,Math.min(MAXZ,z))}
@@ -283,6 +284,6 @@
     refresh();
   }
   function confirmDiscard(){draft=[];return true}
-  window.EPCMap={state:function(){return JSON.parse(JSON.stringify({pin:S.pin,areas:S.areas,obstacles:S.obst,net:netArea()}))},resize:function(){size();schedule()}};
+  window.EPCMap={addLayer:function(fn){layers.push(fn);schedule()},repaint:function(){schedule()},state:function(){return JSON.parse(JSON.stringify({pin:S.pin,areas:S.areas,obstacles:S.obst,net:netArea()}))},resize:function(){size();schedule()}};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(init,80)});else setTimeout(init,80);
 })();
