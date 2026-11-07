@@ -80,7 +80,7 @@ try {
     'DPR cover page updates from the project-name field');
   await page.evaluate(() => { window.print = () => { window.__dprPrintCalled = true; }; });
   await page.locator('#dpr_pdf').click();
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(750);
   check(await page.locator('#dprPrintRoot').count() === 1 && await page.evaluate(() => !!window.__dprPrintCalled),
     'Generate DPR PDF assembles the complete printable report and invokes the print-to-PDF flow');
   check(await page.evaluate(() => { const i = document.querySelector('#dprPrintRoot .dpr-wm img'); return !!i && i.getAttribute('src') === 'dpr-watermark-colour.png' && i.complete && i.naturalWidth === 1128; }),
