@@ -83,9 +83,17 @@ try {
   await page.waitForTimeout(750);
   check(await page.locator('#dprPrintRoot').count() === 1 && await page.evaluate(() => !!window.__dprPrintCalled),
     'Generate DPR PDF assembles the complete printable report and invokes the print-to-PDF flow');
-  check((await page.locator('#dprPrintRoot').innerText()).includes('PURPOSE AND SCOPE')
-    && await page.locator('#dprPrintRoot .dpr-pg').count() >= 2,
-    'DPR print output contains populated report pages rather than an empty print container');
+  check(await page.evaluate(() => { const i = document.querySelector('#dprPrintRoot .dpr-wm img'); return !!i && i.getAttribute('src') === 'dpr-watermark-colour.png' && i.complete && i.naturalWidth === 1128; }),
+    'DPR pages use the supplied colour watermark image by default');
+  await page.emulateMedia({ media: 'print' });
+  check(await page.evaluate(() => getComputedStyle(document.getElementById('dprPrintRoot')).visibility) === 'visible',
+    'DPR print sheet stays visible in print media (no other module may hide the page)');
+  await page.emulateMedia({ media: 'screen' });
+  await page.locator('#dpr_wmMode').selectOption('gray');
+  await page.locator('#dpr_pdf').click();
+  await page.waitForTimeout(450);
+  check(await page.evaluate(() => { const i = document.querySelector('#dprPrintRoot .dpr-wm img'); return !!i && i.getAttribute('src') === 'dpr-watermark-grayscale.png' && i.complete && i.naturalWidth === 1128; }),
+    'Grayscale watermark option switches the DPR pages to the supplied grayscale image');
   await page.locator('.tabbar button[data-tab="est"]').click();
   check(await page.locator('#view-est').isVisible() && await page.locator('#view-dpr').isHidden(),
     'Navigation leaves the DPR workspace cleanly and returns to the estimator');
