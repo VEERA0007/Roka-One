@@ -1288,9 +1288,20 @@ function model(p){
   $('pfRemove').addEventListener('click',function(){var p=profile();p.photo='';lsSet('gs_profile_v2',p);paintAvatar();toast('Photo removed')});
   $('pfSignOut').addEventListener('click',function(){signOut()});
   $('pfSignIn').addEventListener('click',function(){location.hash='#login'});
+  function refreshWebApp(){
+    toast('Refreshing to the latest version');
+    var done=function(){location.reload()};
+    try{
+      var work=[];
+      if('serviceWorker' in navigator)work.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.update().catch(function(){})}))}));
+      if(window.caches&&caches.keys)work.push(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return /^gensolar/i.test(k)}).map(function(k){return caches.delete(k)}))}));
+      Promise.all(work).then(done,done);setTimeout(done,4000);
+    }catch(e){done()}
+  }
   $('pfCheckUpdates').addEventListener('click',function(){
     try{
-      if(window.GenSolarUpdates&&window.GenSolarUpdates.checkForUpdates){window.GenSolarUpdates.checkForUpdates();}
+      if(window.GENSOLAR_WEB_VERSION){refreshWebApp();}   /* website: refresh in place, never open GitHub */
+      else if(window.GenSolarUpdates&&window.GenSolarUpdates.checkForUpdates){window.GenSolarUpdates.checkForUpdates();}
       else{window.open('https://github.com/VEERA0007/Roka-One/releases/latest','_blank');toast('Opening the latest GenSolar Pro release');}
     }catch(e){toast('Could not start update check. Please try again');}
   });
@@ -1768,7 +1779,7 @@ function model(p){
   function verNewer(a,b){var x=verParts(a),y=verParts(b);for(var i=0;i<Math.max(x.length,y.length);i++){var p=x[i]||0,q=y[i]||0;if(p!==q)return p>q}return false}
   function checkForUpdate(){
     var cur='';try{cur=window.GenSolarNative&&window.GenSolarNative.appVersion?String(window.GenSolarNative.appVersion()):''}catch(e){}
-    if(!cur||typeof fetch!=='function')return;
+    if(!cur||typeof fetch!=='function'||window.GENSOLAR_WEB_VERSION)return;   /* the website updates itself; no APK link */
     var ctl=window.AbortController?new AbortController():null,t=setTimeout(function(){if(ctl)ctl.abort()},8000);
     fetch(UPDATE_API,{headers:{Accept:'application/vnd.github+json'},signal:ctl?ctl.signal:undefined}).then(function(r){return r.ok?r.json():null}).then(function(j){
       clearTimeout(t);if(!j||!j.assets)return;
