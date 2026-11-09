@@ -139,6 +139,7 @@ try {
     'Original Engineering, Procurement and Construction stages remain available');
   check(await page.locator('#epc_tabs [data-t="wind"]').count() === 1 && await page.locator('#epc_map').count() === 1,
     'Wind & Structure tab and Site map are present in Engineering');
+  check(await page.locator('#epcp').count() === 1, 'Panel placement for drawn map areas is present under the Site map');
   for (const tab of gatedTabs) {
     check((await page.locator('#epc_tabs [data-t="' + tab + '"]').getAttribute('data-locked')) === '1',
       'Step is locked until required inputs are entered: ' + tab);
