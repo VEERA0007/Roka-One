@@ -25,7 +25,7 @@
   }
 
   navigator.serviceWorker.addEventListener('controllerchange', function () {
-    if (hadController) showUpdate();
+    /* no update prompt on the website: the new version is used the next time the app opens */
     hadController = true;
   });
 
