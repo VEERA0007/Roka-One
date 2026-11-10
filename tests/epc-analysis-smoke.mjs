@@ -58,6 +58,15 @@ try {
   await page.evaluate(() => { window.print = () => { window.__printed = 1; }; });
   await page.locator('#epca2_print').click(); await page.waitForTimeout(500);
   check(await page.evaluate(() => !!window.__printed && document.querySelectorAll('#printSheet .ep-page').length >= 8), 'Print builds the drawing sheets');
+  // Fabricator box-pipe sections (100x100x2 columns and rafters, 60x40x2 purlins, 50x50x2 braces): thin-wall effective width, no slender fail
+  await page.evaluate(() => {
+    const set = (pre, o) => Object.keys(o).forEach(k => { const e = document.getElementById(pre + k); e.value = o[k]; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); });
+    set('epcw_', { cUpF:.4, cUpE:.55, cDn:.4, rType:'RHS', rb:100, rh:100, rt:2, pType:'RHS', pb:40, ph:60, pt:2 });
+    set('epca2_', { colType:'RHS', colB:100, colH:100, colT:2, brcType:'RHS', brcB:50, brcH:50, brcT:2 });
+  });
+  await page.waitForTimeout(1200);
+  const thinTxt = await page.locator('#epca2_out').innerText();
+  check(!/section is slender/i.test(thinTxt) && /Thin-wall box sections/.test(thinTxt) && /PASSES/.test(thinTxt), 'Thin-wall box sections use effective width, are not rejected as slender, and the block passes');
   const st = await page.evaluate(() => window.EPCAnalysis.status().state);
   console.log('analysis state:', st);
   if (st === 'pass') check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === null, 'Drawings unlock when the analysis passes');

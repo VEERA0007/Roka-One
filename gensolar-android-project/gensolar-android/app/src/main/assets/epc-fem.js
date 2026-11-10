@@ -7,9 +7,8 @@
   /* ---------- sections (SI units m) ---------- */
   function rhs(b,h,t){                                         /* b = width (local y), h = depth (local z); Ro = 2t, Ri = t */
     if(!(b>0&&h>0&&t>0)||2*t>=Math.min(b,h))return null;
-    var R=2*t,r=t,N=20000;
-    function width(B,H,rad,y){var hy=H/2,ay=Math.abs(y);if(ay>=hy)return 0;var lim=hy-rad;if(ay<=lim||rad<=0)return B;var dy=ay-lim;return B-2*rad+2*Math.sqrt(Math.max(0,rad*rad-dy*dy))}
-    function integ(B,H){var dy=H/N,I=0,A=0;for(var i=0;i<N;i++){var y=-H/2+(i+0.5)*dy,w=width(B,H,R,y)-width(B-2*t,H-2*t,r,y);A+=w*dy;I+=w*y*y*dy}return {A:A,I:I}}
+    function rr(B,H,Rc){var As=Rc*Rc*(1-Math.PI/4),Ics=Math.pow(Rc,4)*(1/3-Math.PI/16),yo=H/2-Rc,Isp=yo*yo*As+2*yo*(Rc*Rc*Rc/6)+Ics;return {A:B*H-4*As,I:B*H*H*H/12-4*Isp}}   /* exact rounded rectangle */
+    function integ(B,H){var o=rr(B,H,2*t),i=rr(B-2*t,H-2*t,t);return {A:o.A-i.A,I:o.I-i.I}}                  /* tube: outer radius 2t, inner radius t */
     var a=integ(b,h),c=integ(h,b);
     /* torsion constant of a closed thin-walled box: J = 4 Am^2 t / perimeter (centre-line) */
     var bm=b-t,hm=h-t,J=4*bm*bm*hm*hm*t/(2*(bm+hm));
