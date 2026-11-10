@@ -23,14 +23,19 @@
     var x=integ(b,h),y2=integ(h,b);               /* x: bending about axis parallel to b (strong when h>b) */
     return {A:x.A,Ix:x.I,Iy:y2.I,Zx:x.I/(h/2),Zy:y2.I/(b/2),Av:x.A*h/(b+h)};
   }
+  function chsProps(D,t){                          /* circular hollow section, mm units */
+    if(!(D>0&&t>0)||2*t>=D)return null;
+    var d=D-2*t,A=Math.PI/4*(D*D-d*d),I=Math.PI/64*(Math.pow(D,4)-Math.pow(d,4));
+    return {A:A,Ix:I,Iy:I,Zx:I/(D/2),Zy:I/(D/2),Av:2*A/Math.PI,chs:true,D:D,t:t};
+  }
   function windPressure(p){
     var Vz=p.Vb*p.k1*p.k2*p.k3*p.k4,pz=0.6*Vz*Vz,pd=p.Kd*p.Ka*p.Kc*pz;
     return {Vz:Vz,pz:pz,pd:pd};                   /* N/m2 */
   }
   /* member under a UDL of unit-area pressures. L in m, s (tributary width) in m. Returns utilisation by combo. */
   function memberCheck(sec,fy,L,s,loads,limit,biaxial){
-    var pr=rhsProps(sec.b,sec.h,sec.t);if(!pr)return {error:'Section dimensions are not valid (wall thickness must be less than half the smaller side).'};
-    var eps=Math.sqrt(250/fy),slender=Math.max((sec.b-3*sec.t)/sec.t,(sec.h-3*sec.t)/sec.t)>42*eps;
+    var pr=sec.circ?chsProps(sec.b,sec.t):rhsProps(sec.b,sec.h,sec.t);if(!pr)return {error:'Section dimensions are not valid (wall thickness must be less than half the smaller side).'};
+    var eps=Math.sqrt(250/fy),slender=sec.circ?(sec.b/sec.t>146*eps*eps):(Math.max((sec.b-3*sec.t)/sec.t,(sec.h-3*sec.t)/sec.t)>42*eps);
     var Mdx=pr.Zx*fy/GM0/1e6,Mdy=pr.Zy*fy/GM0/1e6,Vd=pr.Av*fy/(Math.sqrt(3)*GM0)/1e3; /* kNm, kNm, kN */
     var combos=[],g=null,gu=0,gs=-1;
     loads.ult.forEach(function(c){
@@ -70,7 +75,7 @@
     out.foundationWeightMin=Math.max(0,1.5*wu*c*Ac/0.9-D);   /* 0.9(D+Wf) >= 1.5 Wu,v */
     return out;
   }
-  window.EPCWindEngine={rhsProps:rhsProps,windPressure:windPressure,memberCheck:memberCheck,loadSets:loadSets,anchors:anchors};
+  window.EPCWindEngine={rhsProps:rhsProps,chsProps:chsProps,windPressure:windPressure,memberCheck:memberCheck,loadSets:loadSets,anchors:anchors};
 
   /* ================= field spec ================= */
   var G=[
@@ -100,8 +105,8 @@
    {t:'Purlin and rafter sections (required)',f:[
     {id:'fy',l:'Steel yield strength fy (MPa)',min:100,step:5,hint:'IS 2062 E250 = 250, E350 = 350'},
     {id:'lim',l:'Deflection limit, span / ?',min:50,step:5,hint:'e.g. 180 for purlins, per your engineer'},
-    {id:'pb',l:'Purlin width b (mm)',min:10,step:1},{id:'ph',l:'Purlin depth h (mm), normal to roof',min:10,step:1},{id:'pt',l:'Purlin wall t (mm)',min:1,step:0.1},
-    {id:'rb',l:'Rafter width b (mm)',min:10,step:1},{id:'rh',l:'Rafter depth h (mm)',min:10,step:1},{id:'rt',l:'Rafter wall t (mm)',min:1,step:0.1}]},
+    {id:'pType',l:'Purlin section type',sel:['RHS','CHS'],def:'RHS'},{id:'pb',l:'Purlin width b, or pipe diameter (mm)',min:10,step:0.1},{id:'ph',l:'Purlin depth h (mm), normal to roof (RHS only)',min:10,step:1},{id:'pt',l:'Purlin wall t (mm)',min:1,step:0.1},
+    {id:'rType',l:'Rafter section type',sel:['RHS','CHS'],def:'RHS'},{id:'rb',l:'Rafter width b, or pipe diameter (mm)',min:10,step:0.1},{id:'rh',l:'Rafter depth h (mm) (RHS only)',min:10,step:1},{id:'rt',l:'Rafter wall t (mm)',min:1,step:0.1}]},
    {t:'Column anchors (required)',f:[
     {id:'nb',l:'Anchor bolts per column',min:1,step:1},
     {id:'tcap',l:'Design tension capacity per bolt (kN)',min:0.1,step:0.1,hint:'IS 800 cl. 10.3 or bolt supplier, design value'},
@@ -119,7 +124,7 @@
   function projName(){var e=$('engSite');return e&&e.value.trim()?e.value.trim():'(unnamed)'}
   function loadAll(){try{return JSON.parse(localStorage.getItem(KEY))||{}}catch(e){return {}}}
   function saveVals(){var all=loadAll(),o={};ALL.forEach(function(x){var e=$('epcw_'+x.id);if(e)o[x.id]=x.chk?e.checked:e.value});all[projName()]=o;try{localStorage.setItem(KEY,JSON.stringify(all))}catch(e){}}
-  function loadVals(){var o=loadAll()[projName()]||{};ALL.forEach(function(x){var e=$('epcw_'+x.id);if(!e)return;if(x.chk)e.checked=!!o[x.id];else e.value=o[x.id]!==undefined?o[x.id]:(x.sel?'':'')})}
+  function loadVals(){var o=loadAll()[projName()]||{};ALL.forEach(function(x){var e=$('epcw_'+x.id);if(!e)return;if(x.chk)e.checked=!!o[x.id];else e.value=o[x.id]!==undefined?o[x.id]:(x.def||'')})}
 
   /* ================= state / results ================= */
   var result={state:'missing',missing:[],text:''};
@@ -127,6 +132,7 @@
     var v={},miss=[];
     ALL.forEach(function(x){
       if(x.opt)return;var e=$('epcw_'+x.id);
+      if((x.id==='ph'&&($('epcw_pType')||{}).value==='CHS')||(x.id==='rh'&&($('epcw_rType')||{}).value==='CHS')){v[x.id]=0;return}
       if(x.chk){v[x.id]=!!(e&&e.checked);if(!v[x.id])miss.push(x.l);return}
       if(x.sel){v[x.id]=e?e.value:'';if(!v[x.id])miss.push(x.l);return}
       var n=nv(e);
@@ -152,8 +158,8 @@
     var q={dead:v.modKg*9.81/1000/area+v.strKn,live:v.llKn};
     var s=(depth+L.gap/1000)/v.nPur,Lp=L.fs/1000,Lr=(L.cs/1000)/Math.cos(beta);
     var ls=loadSets(q,beta,wd,wu);
-    var pur=memberCheck({b:v.pb,h:v.ph,t:v.pt},v.fy,Lp,s,ls,v.lim,true);
-    var raf=memberCheck({b:v.rb,h:v.rh,t:v.rt},v.fy,Lr,L.fs/1000,ls,v.lim,false);
+    var pur=memberCheck({b:v.pb,h:v.ph,t:v.pt,circ:v.pType==='CHS'},v.fy,Lp,s,ls,v.lim,true);
+    var raf=memberCheck({b:v.rb,h:v.rh,t:v.rt,circ:v.rType==='CHS'},v.fy,Lr,L.fs/1000,ls,v.lim,false);
     if(pur.error||raf.error){result={state:'missing',missing:[pur.error||raf.error]};return result}
     var anc=anchors(q,beta,wu,L.fs/1000,Lr,v.nb,v.tcap,v.vcap);
     var fails=[];
@@ -249,13 +255,18 @@
     if(!(roof>0))m.push('Site: surveyed usable roof area');
     return m;
   };
-  var NEEDS_SITE={autodesign:1,layout:1,wind:1},NEEDS_WIND={draw:1,elec:1,bom:1,docs:1};
+  var NEEDS_SITE={autodesign:1,layout:1,wind:1},NEEDS_WIND={analysis:1,draw:1,elec:1,bom:1,docs:1},NEEDS_ANALYSIS={draw:1,elec:1,bom:1,docs:1};
   function gateFor(t){
     if(NEEDS_SITE[t]){var m=SITE_REQ();return m.length?{step:'site',title:'Complete the Site details first',items:m}:null}
     if(NEEDS_WIND[t]){
       var s=SITE_REQ();if(s.length)return {step:'site',title:'Complete the Site details first',items:s};
       if(result.state==='missing')return {step:'wind',title:'Complete Wind & Structure first',items:result.missing};
-      if(result.state==='fail')return {step:'wind',title:'Wind & Structure checks fail. Change the section, spacing or loads first',items:result.fails};
+      if(result.state==='fail'&&!(t==='analysis'))return {step:'wind',title:'Wind & Structure checks fail. Change the section, spacing or loads first',items:result.fails};
+      if(NEEDS_ANALYSIS[t]){
+        var A=window.EPCAnalysis&&window.EPCAnalysis.status();
+        if(!A||A.state==='missing')return {step:'analysis',title:'Complete the Analysis first',items:A&&A.missing&&A.missing.length?A.missing:['Run the 3D frame analysis']};
+        if(A.state==='fail')return {step:'analysis',title:'The 3D frame analysis fails. Change the sections, spacing or loads first',items:A.fails};
+      }
     }
     return null;
   }
@@ -270,7 +281,7 @@
   function showGate(g){
     var el=$('epc_gate');if(!el)return;
     el.hidden=false;
-    el.innerHTML='<b>'+esc(g.title)+'</b><ul style="margin:6px 0 6px 18px">'+g.items.map(function(m){return '<li>'+esc(m)+'</li>'}).join('')+'</ul><button type="button" class="btn alt sm" id="epc_gateGo">Go to '+(g.step==='site'?'Site':'Wind &amp; Structure')+'</button>';
+    el.innerHTML='<b>'+esc(g.title)+'</b><ul style="margin:6px 0 6px 18px">'+g.items.map(function(m){return '<li>'+esc(m)+'</li>'}).join('')+'</ul><button type="button" class="btn alt sm" id="epc_gateGo">Go to '+(g.step==='site'?'Site':g.step==='analysis'?'Analysis':'Wind &amp; Structure')+'</button>';
     $('epc_gateGo').onclick=function(){el.hidden=true;var b=q('#epc_tabs .tab[data-t="'+g.step+'"]');if(b)b.click()};
   }
   function installGate(){
@@ -296,7 +307,7 @@
       g.f.forEach(function(x){
         var id='epcw_'+x.id,hint=x.hint?'<small>'+esc(x.hint)+'</small>':'';
         if(x.chk)h+='<label style="flex-direction:row;align-items:center;gap:6px"><input id="'+id+'" type="checkbox"> '+esc(x.l)+'</label>';
-        else if(x.sel)h+='<label>'+esc(x.l)+'<select id="'+id+'"><option value="">Select</option>'+x.sel.map(function(o){return '<option>'+esc(o)+'</option>'}).join('')+'</select></label>';
+        else if(x.sel)h+='<label>'+esc(x.l)+'<select id="'+id+'">'+(x.def?'':'<option value="">Select</option>')+x.sel.map(function(o){return '<option>'+esc(o)+'</option>'}).join('')+'</select></label>';
         else if(x.text)h+='<label>'+esc(x.l)+'<input id="'+id+'" type="text"></label>';
         else h+='<label>'+esc(x.l)+'<input id="'+id+'" type="number" inputmode="decimal" min="'+x.min+'" step="'+x.step+'">'+hint+'</label>';
       });
@@ -329,6 +340,6 @@
     ['epc_newProj','epc_loadRef'].forEach(function(id){var b=$(id);if(b)b.addEventListener('click',function(){setTimeout(function(){loadVals();refresh()},120)})});
     refresh();
   }
-  window.EPCWind={status:function(){return result},recalc:function(){compute();return result},gate:gateFor};
+  window.EPCWind={status:function(){return result},recalc:function(){compute();return result},gate:gateFor,refreshLocks:paintLocks};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(init,50)});else setTimeout(init,50);
 })();

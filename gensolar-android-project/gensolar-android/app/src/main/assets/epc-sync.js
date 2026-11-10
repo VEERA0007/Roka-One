@@ -152,7 +152,11 @@
     if(W&&W.state==='pass'){chips.push(['Wind / structure','pass (prelim.)','pd '+(W.pd*1000).toFixed(0)+' N/m²']);add('ok','Wind and structure checks pass for the entered values (preliminary). Pressure '+(W.pd*1000).toFixed(0)+' N/m², purlin '+W.pur.maxUtil.toFixed(2)+', rafter '+W.raf.maxUtil.toFixed(2)+', anchors '+W.anc.util.toFixed(2)+'.')}
     else if(W&&W.state==='fail'){chips.push(['Wind / structure','FAIL']);add('err','Wind and structure checks fail: '+W.fails.join('; ')+'.')}
     else add('warn','Wind and structure inputs are incomplete, so Drawings, Electrical, BOM and Documents stay locked.');
-    add('info','Preliminary design. Roof capacity, column buckling, connections and foundations are not checked by the app. A structural engineer must verify and sign off before construction.');
+    var AN=window.EPCAnalysis&&window.EPCAnalysis.status();
+    if(AN&&AN.state==='pass'){chips.push(['3D frame analysis','pass (prelim.)']);add('ok','3D frame analysis passes for all four IS 800 combinations (preliminary).')}
+    else if(AN&&AN.state==='fail'){chips.push(['3D frame analysis','FAIL']);add('err','3D frame analysis fails: '+AN.fails.slice(0,4).join('; ')+(AN.fails.length>4?' and '+(AN.fails.length-4)+' more':'')+'.')}
+    else if(W&&W.state!=='missing')add('warn','The 3D frame analysis inputs are incomplete, so Drawings, Electrical, BOM and Documents stay locked.');
+    add('info','Preliminary design. Roof capacity, second-order effects, connections and foundations are not checked by the app. A structural engineer must verify and sign off before construction.');
     return {out:out,chips:chips};
   }
 
