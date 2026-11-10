@@ -1,5 +1,5 @@
 global.window={};
-require('node:path').resolve('gensolar-android-project/gensolar-android/app/src/main/assets/epc-fem.js');
+require(require('node:path').resolve('gensolar-android-project/gensolar-android/app/src/main/assets/epc-fem.js'));
 const F=window.EPCFem;let fail=0;
 function ok(n,c,i){if(!c){fail++;console.log('FAIL',n,i)}else console.log('ok',n,i===undefined?'':i)}
 const near=(a,b,t)=>Math.abs(a-b)<=t*Math.max(1,Math.abs(b));
