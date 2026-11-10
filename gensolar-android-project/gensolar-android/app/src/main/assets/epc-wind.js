@@ -7,19 +7,8 @@
   /* ================= engine ================= */
   function rhsProps(b,h,t){                       /* rectangular hollow section, rounded corners Ro=2t, Ri=t; load along h */
     if(!(b>0&&h>0&&t>0)||2*t>=Math.min(b,h))return null;
-    var R=2*t,r=t,N=40000;
-    function width(B,H,rad,y){                    /* chord width of a rounded rectangle B x H at height y from centre */
-      var hy=H/2,ay=Math.abs(y);if(ay>=hy)return 0;
-      var lim=hy-rad;if(ay<=lim||rad<=0)return B;
-      var dy=ay-lim;return B-2*rad+2*Math.sqrt(Math.max(0,rad*rad-dy*dy));
-    }
-    function integ(B,H){                          /* second moment about the axis parallel to B, and area */
-      var dy=H/(N),I=0,A=0,y;
-      for(var i=0;i<N;i++){y=-H/2+(i+0.5)*dy;
-        var w=width(B,H,R,y)-width(B-2*t,H-2*t,r,y);
-        A+=w*dy;I+=w*y*y*dy;}
-      return {A:A,I:I};
-    }
+    function rr(B,H,Rc){var As=Rc*Rc*(1-Math.PI/4),Ics=Math.pow(Rc,4)*(1/3-Math.PI/16),yo=H/2-Rc,Isp=yo*yo*As+2*yo*(Rc*Rc*Rc/6)+Ics;return {A:B*H-4*As,I:B*H*H*H/12-4*Isp}}   /* exact rounded rectangle */
+    function integ(B,H){var o=rr(B,H,2*t),i=rr(B-2*t,H-2*t,t);return {A:o.A-i.A,I:o.I-i.I}}                  /* tube: outer radius 2t, inner radius t */
     var x=integ(b,h),y2=integ(h,b);               /* x: bending about axis parallel to b (strong when h>b) */
     return {A:x.A,Ix:x.I,Iy:y2.I,Zx:x.I/(h/2),Zy:y2.I/(b/2),Av:x.A*h/(b+h)};
   }
@@ -37,6 +26,12 @@
     var pr=sec.circ?chsProps(sec.b,sec.t):rhsProps(sec.b,sec.h,sec.t);if(!pr)return {error:'Section dimensions are not valid (wall thickness must be less than half the smaller side).'};
     var eps=Math.sqrt(250/fy),slender=sec.circ?(sec.b/sec.t>146*eps*eps):(Math.max((sec.b-3*sec.t)/sec.t,(sec.h-3*sec.t)/sec.t)>42*eps);
     var Mdx=pr.Zx*fy/GM0/1e6,Mdy=pr.Zy*fy/GM0/1e6,Vd=pr.Av*fy/(Math.sqrt(3)*GM0)/1e3; /* kNm, kNm, kN */
+    var reduced=false;
+    if(!sec.circ&&window.EPCThin){                    /* thin-wall box: effective-width properties replace the slender fail */
+      var tx=window.EPCThin.rect(sec.b,sec.h,sec.t,fy),ty=window.EPCThin.rect(sec.h,sec.b,sec.t,fy);
+      if(tx&&ty){reduced=tx.reduced||ty.reduced;slender=tx.tooThin||tx.shearBuckling||ty.tooThin;
+        Mdx=Math.min(pr.Zx,tx.W)*fy/GM0/1e6;Mdy=Math.min(pr.Zy,ty.W)*fy/GM0/1e6}
+    }
     var combos=[],g=null,gu=0,gs=-1;
     loads.ult.forEach(function(c){
       var w=c.n*s,ws=biaxial?c.s*s:0;             /* kN/m */
@@ -49,7 +44,7 @@
     var dmax=0,dname='';
     loads.ser.forEach(function(c){var w=Math.abs(c.n*s);var d=5*w*Math.pow(L*1000,4)/(384*E_STEEL*pr.Ix);if(d>dmax){dmax=d;dname=c.name}});
     var dlim=L*1000/limit;
-    return {props:pr,eps:eps,slender:slender,Mdx:Mdx,Mdy:Mdy,Vd:Vd,combos:combos,gov:g,maxUtil:gu,maxShear:gs,
+    return {props:pr,eps:eps,slender:slender,reduced:reduced,Mdx:Mdx,Mdy:Mdy,Vd:Vd,combos:combos,gov:g,maxUtil:gu,maxShear:gs,
             defl:dmax,deflCombo:dname,deflLimit:dlim,deflUtil:dmax/dlim,
             ok:!slender&&gu<=1&&gs<=1&&dmax<=dlim};
   }
@@ -232,7 +227,7 @@
       row('Rafter span along slope',f(r.Lr,3)+' m','Layout column spacing ÷ cos tilt')+'</tbody></table>';
     function mrow(n,m){return '<tr><td>'+n+'</td><td>'+f(m.props.Zx/1000,1)+' / '+f(m.props.Ix/1e4,1)+'</td><td>'+f(m.maxUtil,2)+'</td><td>'+f(m.maxShear,2)+'</td><td>'+f(m.defl,1)+' / '+f(m.deflLimit,1)+'</td><td>'+pill(m.ok)+'</td></tr>'}
     h+='<h4 style="margin:12px 0 4px">Member checks (IS 800 limit state, γm0 = 1.10)</h4><div style="overflow-x:auto"><table class="epcw-m" style="width:100%;font-size:13px"><thead><tr><th>Member</th><th>Ze cm³ / Ix cm⁴</th><th>Bending</th><th>Shear</th><th>Deflection mm</th><th></th></tr></thead><tbody>'+mrow('Purlin',p)+mrow('Rafter',rf)+'</tbody></table></div>'+
-      '<small>Governing purlin combination: '+esc(p.gov.name)+'. Section properties are computed from b, h, t with corner radius Ro = 2t, Ri = t; compare with the IS 4923 / supplier table.</small>';
+      '<small>Governing purlin combination: '+esc(p.gov.name)+'. Section properties are computed from b, h, t with corner radius Ro = 2t, Ri = t; compare with the IS 4923 / supplier table.'+((p.reduced||rf.reduced)?' <b>Thin-wall section: effective-width properties are used for bending (Winter method, as in EN 1993-1-5 and IS 801). Confirm against IS 801 with your engineer.</b>':'')+'</small>';
     h+='<h4 style="margin:12px 0 4px">Column base and anchors (per column)</h4><table class="epcw-t" style="width:100%;font-size:13px"><tbody>'+
       row('Dead load carried',f(a.dead,2)+' kN')+
       row('Factored net uplift (1.5 WL − 0.9 DL)',f(a.uplift,2)+' kN',a.needsAnchor?'anchors in tension':'no net uplift')+

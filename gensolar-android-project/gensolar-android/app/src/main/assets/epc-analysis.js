@@ -89,9 +89,19 @@
     var fcc=Math.PI*Math.PI*E_MPA/(klr*klr),lam=Math.sqrt(fy/fcc),phi=0.5*(1+alpha*(lam-0.2)+lam*lam);
     return Math.min(fy/GM0,fy/GM0/(phi+Math.sqrt(Math.max(0,phi*phi-lam*lam))));
   }
-  function slenderSec(sec,fy){
-    var eps=Math.sqrt(250/fy);
-    return sec.type==='CHS'?(sec.b/sec.t>146*eps*eps):(Math.max((sec.b-3*sec.t)/sec.t,(sec.h-3*sec.t)/sec.t)>42*eps);
+  /* thin-wall box sections: effective-width properties; returns capacities and flags (sec in m, fy in MPa) */
+  function thin(sec,fy){
+    if(sec.type==='CHS'){var eps=Math.sqrt(250/fy);return {reduced:false,slender:sec.b/sec.t>146*eps*eps,Ac:sec.A,Wy:sec.Zy,Wz:sec.Zz}}
+    var T=window.EPCThin,tx=T&&T.rect(sec.b*1000,sec.h*1000,sec.t*1000,fy),ty=T&&T.rect(sec.h*1000,sec.b*1000,sec.t*1000,fy);
+    if(!tx||!ty){var e2=Math.sqrt(250/fy);return {reduced:false,slender:Math.max((sec.b-3*sec.t)/sec.t,(sec.h-3*sec.t)/sec.t)>42*e2,Ac:sec.A,Wy:sec.Zy,Wz:sec.Zz}}
+    return {reduced:tx.reduced||ty.reduced,slender:tx.tooThin||tx.shearBuckling||ty.tooThin,Ac:Math.min(sec.A,tx.Ac*1e-6),Wy:Math.min(sec.Zy,tx.W*1e-9),Wz:Math.min(sec.Zz,ty.W*1e-9)};
+  }
+  function slenderSec(sec,fy){return thin(sec,fy).slender}
+  /* compression resistance with effective area: lambda = sqrt(Aeff fy / Ncr) */
+  function ncd(sec,th,fy,klr,alpha){
+    var ar=th.Ac/sec.A,lam=klr/(Math.PI*Math.sqrt(E_MPA/fy))*Math.sqrt(ar),phi=0.5*(1+alpha*(lam-0.2)+lam*lam);
+    var chi=Math.min(1,1/(phi+Math.sqrt(Math.max(0,phi*phi-lam*lam))));
+    return chi*th.Ac*fy*1000/GM0;
   }
   var ULS=[{name:'1.5(DL+LL)',f:{DL:1.5,LL:1.5}},{name:'1.5DL+1.5WL(down)',f:{DL:1.5,WLd:1.5}},
            {name:'1.2(DL+LL+WL down)',f:{DL:1.2,LL:1.2,WLd:1.2}},{name:'0.9DL+1.5WL(uplift)',f:{DL:0.9,WLu:1.5}}];
@@ -123,9 +133,10 @@
       sg.L=0;sg.els.forEach(function(mi){sg.L+=res.mem[mi].L});
       var s0=sg.sec,fl=sg.kind==='truss';
       sg.fy=fy;sg.r=Math.min(s0.ry,s0.rz);sg.KLr=I.K*sg.L/sg.r;
-      sg.Ntd=s0.A*fy*1000/GM0;sg.Mdy=s0.Zy*fy*1000/GM0;sg.Mdz=s0.Zz*fy*1000/GM0;sg.Vd=s0.Av*fy*1000/(Math.sqrt(3)*GM0);
-      sg.Ncd=s0.A*fcd(fy,Math.max(sg.KLr,1),alpha)*1000;
-      sg.slender=slenderSec(s0,fy);
+      var th=thin(s0,fy);sg.reduced=th.reduced;
+      sg.Ntd=s0.A*fy*1000/GM0;sg.Mdy=th.Wy*fy*1000/GM0;sg.Mdz=th.Wz*fy*1000/GM0;sg.Vd=s0.Av*fy*1000/(Math.sqrt(3)*GM0);
+      sg.Ncd=ncd(s0,th,fy,Math.max(sg.KLr,1),alpha);
+      sg.slender=th.slender;
       var maxN=0,minN=0,maxMy=0,maxMz=0,maxV=0,u=0,uc='',anyComp=false;
       ULS.forEach(function(cb){
         var cr=cres[cb.name];
@@ -212,6 +223,7 @@
     });
     reacts.forEach(function(r,i){if(r.anchorUtil>1)fails.push('Base '+(i+1)+': anchor bolt interaction '+r.anchorUtil.toFixed(2)+' > 1')});
     if(sway.util>1)fails.push('Frame sway '+sway.val.toFixed(1)+' mm > '+sway.lim.toFixed(1)+' mm');
+    if(list.some(function(g){return g.reduced}))warn.push('Thin-wall box sections: effective-width properties are used for bending and compression (Winter method, as in EN 1993-1-5; IS 801 uses the same method with slightly different coefficients). Confirm against IS 801 with your engineer.');
     if(I.base==='Fixed')warn.push('Fixed base: base moments are listed but the anchor check uses forces only. Base plate and anchor design for moment is the engineer\'s.');
     return {ok:true,state:fails.length?'fail':'pass',fails:fails,warn:warn,c:c,P:P,sec:sec,nodes:B.model.nodes,mem:mem,members:B.model.members,res:res,cres:cres,
       segs:list,elUtil:elUtil,reacts:reacts,sway:sway,umax:umax,umaxAt:uc2,nNodes:B.model.nodes.length,nMembers:mem.length,ULS:ULS,SLS:SLS,I:I,fy:fy};
