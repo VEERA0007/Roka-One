@@ -205,8 +205,16 @@ try {
     const c = document.getElementById('epcw_survey'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await page.waitForTimeout(800);
+  check((await page.locator('#epc_tabs [data-t="analysis"]').getAttribute('data-locked')) === null
+    && (await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === '1',
+    'Analysis unlocks after Wind & Structure; Drawings, Electrical, BOM and Documents wait for the analysis');
+  await page.evaluate(() => {
+    const a = {colType:'CHS',colB:114.3,colT:4.5,brcType:'CHS',brcB:76.1,brcT:3.6,base:'Pinned',K:1,bclass:'b'};
+    Object.keys(a).forEach(k => { const e = document.getElementById('epca2_' + k); e.value = a[k]; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); });
+  });
+  await page.waitForTimeout(1000);
   check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === null,
-    'Drawings, Electrical, BOM and Documents unlock once Wind & Structure checks pass');
+    'Drawings, Electrical, BOM and Documents unlock once the 3D frame analysis passes');
   for (const tab of originalTabs) {
     await page.locator('#epc_tabs [data-t="' + tab + '"]').click();
     check(await page.locator('#epc_p-' + tab).isVisible(),
