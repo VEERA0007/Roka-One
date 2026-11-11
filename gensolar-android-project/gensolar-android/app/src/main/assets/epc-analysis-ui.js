@@ -20,16 +20,19 @@
     {id:'bclass',l:'Buckling class (IS 800 Table 7)',sel:['a','b','c','d'],hint:'Hot-rolled hollow a, cold-formed hollow b, per the section'}]},
    {t:'Layout assumptions (confirm against the fabrication drawing)',f:[
     {id:'brcFrac',l:'Brace top, fraction of the tallest column height',min:0.1,step:0.05,def:'0.75',hint:'Layout cut list: brace = hypot(column span, 0.75 × top height)'},
-    {id:'tieFrac',l:'Column tie height, fraction of column height',min:0.1,step:0.05,def:'0.75',hint:'The Layout does not state it'},
+    {id:'tieFrac',l:'Column tie height, fraction of column height',min:0.1,step:0.05,def:'0.6',hint:'The Layout 3D view draws the column ties at 0.6 of the column height'},
     {id:'swayLim',l:'Sway limit, height / ?',min:50,step:5,def:'150',hint:'IS 800 Table 6, per your engineer'}]}
   ];
   var ALL=[];G.forEach(function(g){g.f.forEach(function(x){ALL.push(x)})});
   var cfg={view:'3d',mode:'util',combo:'1.5DL+1.5WL(down)',frame:0,az:35,el:28,blk:0,defl:1,names:1};
-  var result={state:'missing',missing:['Complete Wind & Structure first']},run=null;
+  var result={state:'missing',missing:['Complete Wind & Structure first']},run=null,runs=[];
 
   function loadAll(){try{return JSON.parse(localStorage.getItem(KEY))||{}}catch(e){return {}}}
-  function saveVals(){var all=loadAll(),o={};ALL.forEach(function(x){var e=$('epca2_'+x.id);if(e)o[x.id]=e.value});all[projName()]=o;try{localStorage.setItem(KEY,JSON.stringify(all))}catch(e){}}
-  function loadVals(){var o=loadAll()[projName()]||{};ALL.forEach(function(x){var e=$('epca2_'+x.id);if(e)e.value=o[x.id]!==undefined?o[x.id]:(x.def||'')})}
+  function saveVals(){var all=loadAll(),o={_rev:REV};ALL.forEach(function(x){var e=$('epca2_'+x.id);if(e)o[x.id]=e.value});all[projName()]=o;try{localStorage.setItem(KEY,JSON.stringify(all))}catch(e){}}
+  /* REV 2: the column tie default moved from 0.75 to 0.6, the height the Layout draws. A 0.75 saved before this revision is the old
+     default, not a decision, so it is dropped once and the new default applies. */
+  var REV=2;
+  function loadVals(){var o=loadAll()[projName()]||{};if((o._rev||1)<REV&&o.tieFrac==='0.75')delete o.tieFrac;ALL.forEach(function(x){var e=$('epca2_'+x.id);if(e)e.value=o[x.id]!==undefined?o[x.id]:(x.def||'')})}
   function nv(id){var e=$('epca2_'+id);if(!e||e.value==='')return NaN;var x=parseFloat(e.value);return isFinite(x)?x:NaN}
 
   /* ---------- compute ---------- */
@@ -44,17 +47,21 @@
     return {I:I,miss:miss};
   }
   function compute(){
-    run=null;
+    run=null;runs=[];
     var W=window.EPCWind&&window.EPCWind.status();
     if(!W||W.state==='missing'){result={state:'missing',missing:['Wind & Structure inputs are incomplete (loads, spans and the purlin and rafter sections come from there)'].concat(W&&W.missing?W.missing:[])};return result}
     var S=layout();if(!S||!S.blocks){result={state:'missing',missing:['Layout is not available']};return result}
     var g=gather();if(g.miss.length){result={state:'missing',missing:g.miss};return result}
-    g.I.K=g.I.K;g.I.bclass=g.I.bclass;
     var bi=Math.min(cfg.blk,S.blocks.length-1);cfg.blk=bi;
-    var r;try{r=Eng.analyse(S,bi,W,g.I)}catch(e){r={error:'Analysis failed: '+e.message}}
-    if(r.error){result={state:'missing',missing:[r.error]};return result}
-    run=r;
-    result={state:r.state,missing:[],fails:r.fails,text:r.fails.length?r.fails.slice(0,4).join('; '):'Preliminary analysis passes',block:S.blocks[bi].name};
+    var errs={},eo=[],fails=[],nm=function(i){return S.blocks[i].name||('Block '+(i+1))};
+    S.blocks.forEach(function(b,i){
+      var r;try{r=Eng.analyse(S,i,W,g.I)}catch(e){r={error:'Analysis failed: '+e.message}}
+      if(r.error){if(!errs[r.error]){errs[r.error]=[];eo.push(r.error)}errs[r.error].push(nm(i));return}
+      runs[i]=r;r.fails.forEach(function(x){fails.push(nm(i)+' · '+x)});
+    });
+    if(eo.length){runs=[];result={state:'missing',missing:eo.map(function(m){return errs[m].length===S.blocks.length?m:errs[m].join(', ')+': '+m})};return result}
+    run=runs[bi];
+    result={state:fails.length?'fail':'pass',missing:[],fails:fails,text:fails.length?fails.slice(0,4).join('; '):'Preliminary analysis passes for every block',block:nm(bi),blocks:runs.map(function(r,i){return {name:nm(i),state:r.state}})};
     return result;
   }
 
@@ -233,6 +240,7 @@
     var x=run;
     if(prog)prog.textContent=x.nNodes+' nodes, '+x.nMembers+' members analysed';
     var h='<div class="epca-warnings" style="margin-top:10px;border-color:'+(r.state==='pass'?'var(--ok,#1a7f4b)':'var(--danger,#b3261e)')+'"><b>'+(r.state==='pass'?'PRELIMINARY ANALYSIS PASSES':'ANALYSIS CHECKS FAIL')+'</b> — not approved. '+esc(r.state==='pass'?'Every member and anchor is within its limit for the four IS 800 combinations.':r.fails.join('; '))+'</div>';
+    h+='<div class="meta" style="margin-top:6px">All blocks: '+r.blocks.map(function(b){return esc(b.name)+' '+pill(b.state==='pass')}).join(' · ')+'</div>';
     h+='<h4 style="margin:12px 0 4px">Model</h4><div class="meta">'+esc(r.block)+': '+x.nNodes+' nodes, '+x.nMembers+' members, '+x.nNodes*6+' degrees of freedom. Frames '+x.c.nRaf+', columns per frame '+x.c.nCol+', rafter '+f(x.c.rafterLen,0)+' mm, purlin run '+f(x.c.purlinLen,0)+' mm. Largest displacement '+f(x.umax*1000,1)+' mm ('+esc(x.umaxAt.combo)+').</div>';
     h+='<div id="epca2_view">'+viewHtml(x)+'</div>';
     h+='<h4 style="margin:12px 0 4px">Member checks (IS 800, γm0 = 1.10)</h4>'+summary(x)+
@@ -293,7 +301,7 @@
   var timer=null;
   function refresh(){
     clearTimeout(timer);
-    timer=setTimeout(function(){fillBlocks();compute();render();if(window.EPCWind&&window.EPCWind.refreshLocks)window.EPCWind.refreshLocks();if(window.EPCSync&&window.EPCSync.refresh)window.EPCSync.refresh()},200);
+    timer=setTimeout(function(){fillBlocks();compute();render();try{document.dispatchEvent(new CustomEvent('epc:analysis'))}catch(e){}if(window.EPCWind&&window.EPCWind.refreshLocks)window.EPCWind.refreshLocks();if(window.EPCSync&&window.EPCSync.refresh)window.EPCSync.refresh()},200);
   }
   function init(){
     if(!Eng||!F||!mount())return;
@@ -310,6 +318,6 @@
     ['epc_newProj','epc_loadRef'].forEach(function(id){var b=$(id);if(b)b.addEventListener('click',function(){setTimeout(function(){loadVals();fillBlocks();refresh()},150)})});
     refresh();
   }
-  window.EPCAnalysis={status:function(){return result},result:function(){return run},drawings:drawings};
+  window.EPCAnalysis={status:function(){return result},result:function(){return run},runs:function(){return runs},drawings:drawings};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(init,80)});else setTimeout(init,80);
 })();

@@ -153,9 +153,20 @@
     else if(W&&W.state==='fail'){chips.push(['Wind / structure','FAIL']);add('err','Wind and structure checks fail: '+W.fails.join('; ')+'.')}
     else add('warn','Wind and structure inputs are incomplete, so Drawings, Electrical, BOM and Documents stay locked.');
     var AN=window.EPCAnalysis&&window.EPCAnalysis.status();
-    if(AN&&AN.state==='pass'){chips.push(['3D frame analysis','pass (prelim.)']);add('ok','3D frame analysis passes for all four IS 800 combinations (preliminary).')}
+    if(AN&&AN.state==='pass'){chips.push(['3D frame analysis','pass (prelim.)']);add('ok','3D frame analysis passes for all four IS 800 combinations in every block (preliminary).')}
     else if(AN&&AN.state==='fail'){chips.push(['3D frame analysis','FAIL']);add('err','3D frame analysis fails: '+AN.fails.slice(0,4).join('; ')+(AN.fails.length>4?' and '+(AN.fails.length-4)+' more':'')+'.')}
     else if(W&&W.state!=='missing')add('warn','The 3D frame analysis inputs are incomplete, so Drawings, Electrical, BOM and Documents stay locked.');
+    /* The Layout material list uses its own pipe weights; the fabrication BOM uses the sections that were analysed. Say so when they differ. */
+    var EB=window.EPCBom,AR=window.EPCAnalysis&&window.EPCAnalysis.runs&&window.EPCAnalysis.runs(),r0=null;
+    if(AR)AR.forEach(function(r){if(r&&!r0)r0=r});
+    if(r0&&EB&&EB.kgPerM&&S&&S.pipes){
+      var diff=[];
+      [['col','Columns'],['raf','Rafters'],['pur','Purlins'],['brc','Braces and ties']].forEach(function(k){
+        var a=EB.kgPerM(r0.sec[k[0]]),l=S.pipes[k[0]]&&+S.pipes[k[0]].kg;
+        if(a>0&&l>0&&Math.abs(a-l)/a>0.02)diff.push(k[1]+': Layout '+l.toFixed(2)+' kg/m, analysed section '+a.toFixed(2)+' kg/m');
+      });
+      if(diff.length)add('warn','The Layout pipe weights differ from the sections that were analysed ('+diff.join('; ')+'). The fabrication BOM uses the analysed sections, while the Layout material list uses the Layout weights. Update the Layout pipes so both agree.');
+    }
     add('info','Preliminary design. Roof capacity, second-order effects, connections and foundations are not checked by the app. A structural engineer must verify and sign off before construction.');
     return {out:out,chips:chips};
   }
