@@ -45,7 +45,7 @@
       for(i=0;i+1<u.length;i++){
         var mid=(u[i]+u[i+1])/2,k=0;colS.forEach(function(cs){if(cs<mid)k++});
         add(pt(x,yr(u[i]),zr(u[i])),pt(x,yr(u[i+1]),zr(u[i+1])),'beam',P.raf,0,'rafter','R'+(j+1)+'.'+(k+1),'R'+(j+1)+'.'+(k+1),
-          {cant:k===0?'B':(k===c.nCol?'A':null)});
+          {cant:k===0?'B':(k===c.nCol?'A':null),piece:'R'+(j+1),pidx:j});
       }
       for(i=0;i<c.nCol;i++){
         var ytop=yr(colS[i]),ztop=zr(colS[i]),zl=[0,ztop];
@@ -53,20 +53,20 @@
         if(i===c.nCol-1)zl.push(P.brcFrac*ztop);
         zl.sort(function(a,b){return a-b});
         var zu=[];zl.forEach(function(z){if(!zu.length||z-zu[zu.length-1]>1e-6)zu.push(z)});
-        for(var q=0;q+1<zu.length;q++)add(pt(x,ytop,zu[q]),pt(x,ytop,zu[q+1]),'beam',P.col,90,'column','C'+(j+1)+'.'+(i+1),'C'+(j+1)+'.'+(i+1));
+        for(var q=0;q+1<zu.length;q++)add(pt(x,ytop,zu[q]),pt(x,ytop,zu[q+1]),'beam',P.col,90,'column','C'+(j+1)+'.'+(i+1),'C'+(j+1)+'.'+(i+1),{piece:'C'+(j+1)+'.'+(i+1),pidx:i});
       }
       var ytk=yr(colS[c.nCol-1]),zt=zr(colS[c.nCol-1]),yb=yr(colS[c.nCol-2]);
-      add(pt(x,yb,0),pt(x,ytk,P.brcFrac*zt),'truss',P.brc,0,'brace','B'+(j+1),'B'+(j+1));
+      add(pt(x,yb,0),pt(x,ytk,P.brcFrac*zt),'truss',P.brc,0,'brace','B'+(j+1),'B'+(j+1),{piece:'B'+(j+1),pidx:j});
     }
     for(i=0;i<c.nCol;i++){
       var yy=yr(colS[i]),zz=P.tieFrac*zr(colS[i]);
-      for(j=0;j+1<c.nRaf;j++)add(pt(xs[j],yy,zz),pt(xs[j+1],yy,zz),'truss',P.tie,0,'tie','T'+(i+1)+'.'+(j+1),'T'+(i+1)+'.'+(j+1));
+      for(j=0;j+1<c.nRaf;j++)add(pt(xs[j],yy,zz),pt(xs[j+1],yy,zz),'truss',P.tie,0,'tie','T'+(i+1)+'.'+(j+1),'T'+(i+1)+'.'+(j+1),{piece:'T'+(i+1),pidx:i});
     }
     purS.forEach(function(s,p){
       var y=yr(s),z=zr(s),xl=[X0].concat(xs,[X1]);
       for(var q=0;q+1<xl.length;q++){
         var lab='P'+(p+1)+'.'+(q+1);
-        add(pt(xl[q],y,z),pt(xl[q+1],y,z),'beam',P.pur,c.t/RAD,'purlin',lab,lab,{cant:q===0?'B':(q===xl.length-2?'A':null)});
+        add(pt(xl[q],y,z),pt(xl[q+1],y,z),'beam',P.pur,c.t/RAD,'purlin',lab,lab,{cant:q===0?'B':(q===xl.length-2?'A':null),piece:'P'+(p+1),pidx:p});
       }
     });
     list.sort(function(a,b){return a.x-b.x||a.y-b.y||a.z-b.z});
@@ -124,6 +124,13 @@
     try{res=F.solve(B.model)}catch(e){return {error:'Model error: '+e.message}}
     if(res.error)return {error:res.error};
     var mem=B.mem,nst=I.nst||8;
+    /* physical pieces as a fabricator cuts them: a whole rafter, a whole column, a whole purlin line, a whole tie line, a brace.
+       Length = sum of the lengths of the analysed elements of that piece, so the BOM cannot drift from the model. */
+    var pcs={},porder=[];
+    mem.forEach(function(m,mi){var k=m.kind+':'+m.piece,p=pcs[k];
+      if(!p){p=pcs[k]={key:m.piece,kind:m.kind,idx:m.pidx,len:0,sec:m.sec};porder.push(k)}
+      p.len+=res.mem[mi].L*1000});
+    var pieces=porder.map(function(k){return pcs[k]});
     var cres={};ULS.concat(SLS).forEach(function(cb){cres[cb.name]=F.combine(res,cb.f)});
     /* segments */
     var segs={},order=[];
@@ -226,7 +233,30 @@
     if(list.some(function(g){return g.reduced}))warn.push('Thin-wall box sections: effective-width properties are used for bending and compression (Winter method, as in EN 1993-1-5; IS 801 uses the same method with slightly different coefficients). Confirm against IS 801 with your engineer.');
     if(I.base==='Fixed')warn.push('Fixed base: base moments are listed but the anchor check uses forces only. Base plate and anchor design for moment is the engineer\'s.');
     return {ok:true,state:fails.length?'fail':'pass',fails:fails,warn:warn,c:c,P:P,sec:sec,nodes:B.model.nodes,mem:mem,members:B.model.members,res:res,cres:cres,
-      segs:list,elUtil:elUtil,reacts:reacts,sway:sway,umax:umax,umaxAt:uc2,nNodes:B.model.nodes.length,nMembers:mem.length,ULS:ULS,SLS:SLS,I:I,fy:fy};
+      segs:list,pieces:pieces,elUtil:elUtil,reacts:reacts,sway:sway,umax:umax,umaxAt:uc2,nNodes:B.model.nodes.length,nMembers:mem.length,ULS:ULS,SLS:SLS,I:I,fy:fy};
   }
-  window.EPCAnalysisEngine={geometry:geometry,build:build,analyse:analyse,fcd:fcd,ULS:ULS,SLS:SLS,section:section};
+
+  /* Group the pieces of an analysed block into fabricator-style rows. Columns are listed by position from the low edge
+     (COLUMN 1 is the shortest), everything else by length. Lengths are whole mm, as cut; qty is the number of identical pieces. */
+  var ROLE={column:'col',rafter:'raf',purlin:'pur',brace:'brc',tie:'brc'},RANK={column:0,rafter:1,purlin:2,brace:3,tie:4};
+  function pieceRows(r){
+    var rows=[],by={};
+    r.pieces.forEach(function(p){
+      var len=Math.round(p.len),k=p.kind+'|'+(p.kind==='column'?p.idx:'')+'|'+len,o=by[k];
+      if(!o){o=by[k]={kind:p.kind,role:ROLE[p.kind],idx:p.kind==='column'?p.idx:0,len:len,qty:0,sec:p.sec};rows.push(o)}
+      o.qty++;
+    });
+    rows.sort(function(a,b){return RANK[a.kind]-RANK[b.kind]||a.idx-b.idx||a.len-b.len});
+    var cnt={};rows.forEach(function(o){cnt[o.kind]=(cnt[o.kind]||0)+1});
+    var seen={},nb=0;
+    rows.forEach(function(o){
+      seen[o.kind]=(seen[o.kind]||0)+1;
+      if(o.kind==='column'){o.part='COLUMN';o.desc='COLUMN '+(o.idx+1)}
+      else if(o.kind==='rafter'){o.part='RAFTER';o.desc=cnt.rafter>1?'RAFTER '+seen.rafter:'RAFTER'}
+      else if(o.kind==='purlin'){o.part='PURLIN';o.desc=cnt.purlin>1?'PURLIN '+seen.purlin:'PURLIN'}
+      else{o.part='BRACING';nb++;o.desc='BRACING '+nb+(o.kind==='brace'?' (DIAGONAL)':' (COLUMN TIE)')}
+    });
+    return rows;
+  }
+  window.EPCAnalysisEngine={geometry:geometry,build:build,analyse:analyse,fcd:fcd,ULS:ULS,SLS:SLS,section:section,pieceRows:pieceRows};
 })();

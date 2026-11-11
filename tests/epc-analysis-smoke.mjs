@@ -71,6 +71,78 @@ try {
   console.log('analysis state:', st);
   if (st === 'pass') check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === null, 'Drawings unlock when the analysis passes');
   else check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === '1', 'Drawings stay locked when the analysis fails');
+  // ---- Fabrication BOM, built from the analysed pieces ----
+  check(st === 'pass', 'Analysis passes for every block before the BOM checks');
+  check((await page.locator('#epc_tabs [data-t="bom"]').getAttribute('data-locked')) === null, 'BOM unlocks when the analysis passes for every block');
+  await page.locator('#epc_tabs [data-t="bom"]').click(); await page.waitForTimeout(500);
+  check(await page.locator('#epc_p-bom').isVisible() && await page.locator('#epcb').count() === 1, 'BOM tab opens with the fabrication BOM');
+  check(await page.evaluate(() => document.getElementById('epc_p-bom').firstElementChild.id === 'epcb'), 'Fabrication BOM sits above the Layout cut list');
+  const nTab = await page.locator('#epcb_out table.epcb-t').count();
+  check(nTab === 4, 'One table per block plus the walkway: ' + nTab);
+  const title0 = await page.evaluate(() => window.EPCBom.compute().title);
+  check(title0 === 'R0_36.18_BOM_ANALYSIS TEST', 'BOM title is in the fabricator format (revision, total kWp, name): ' + title0);
+  const cmp = await page.evaluate(() => {
+    const bom = window.EPCBom.compute();
+    const lay = [...document.querySelectorAll('#epc_cutTbl tbody tr')].map(tr => [...tr.children].map(td => td.textContent.trim().replace(/,/g, '')));
+    const map = { 'Rafter':'RAFTER', 'Purlin':'PURLIN', 'Diagonal brace':'BRACING 1 (DIAGONAL)', 'Column tie (across)':'BRACING 2 (COLUMN TIE)' };
+    let n = 0; const bad = [];
+    lay.forEach(r => {
+      if (r[0] === 'Walkway') return;
+      const blk = bom.blocks.find(b => b.name === r[0]); if (!blk) { bad.push('no block ' + r[0]); return; }
+      const want = /^Column \d+$/.test(r[1]) ? 'COLUMN ' + r[1].split(' ')[1] : map[r[1]], row = blk.rows.find(x => x.desc === want);
+      if (!row) { bad.push(r[0] + ' ' + r[1] + ' missing'); return; }
+      n++; if (row.qty !== +r[2] || row.len !== +r[3]) bad.push(r[0] + ' ' + r[1] + ': BOM ' + row.qty + ' x ' + row.len + ' vs Layout ' + r[2] + ' x ' + r[3]);
+    });
+    const wk = lay.filter(r => r[0] === 'Walkway'), sup = wk.find(r => /U-support/.test(r[1])), run = wk.find(r => /walkway$/.test(r[1]));
+    return { n, bad, blocks: bom.blocks.length, walk: bom.walk && { sup: bom.walk.sup, L: bom.walk.L }, laySup: sup && +sup[2], layRun: run && +run[3] };
+  });
+  console.log('BOM pieces compared with the Layout cut list:', cmp.n, cmp.bad.join('; '));
+  check(cmp.bad.length === 0 && cmp.n >= 20 && cmp.blocks === 3, 'Every BOM piece (' + cmp.n + ') has the same quantity and length as the Layout cut list');
+  check(cmp.walk && cmp.walk.sup === cmp.laySup && cmp.walk.L === cmp.layRun, 'Walkway supports and run agree with the Layout: ' + JSON.stringify(cmp));
+  const bomTxt = await page.locator('#epcb_out').innerText();
+  check(/PRELIMINARY, NOT APPROVED/.test(bomTxt) && /Base plate 150 × 150 × 5 mm is the size in your reference BOM/.test(bomTxt), 'BOM says it is preliminary and flags the assumed base plate size');
+  check(/Braces and ties follow the Analysis assumptions: brace top at 0.75 of the tallest column, ties at 0.6/.test(bomTxt), 'BOM states the brace and tie positions used (ties at 0.6)');
+  check(/MODULES STRUCTURE DETAILS \(MAIN FRONT\)/.test(bomTxt) && /WALKWAY DETAILS/.test(bomTxt) && /NOTE : PLEASE KEEP SOME EXTRA MATERIAL/.test(bomTxt), 'Tables carry the fabricator headings and the 10% note');
+  const tot0 = await page.evaluate(() => window.EPCBom.compute().total), cols = await page.evaluate(() => window.EPCBom.compute().blocks.reduce((a, b) => a + b.cols, 0));
+  await page.locator('#epcb_plT').fill('6'); await page.waitForTimeout(400);
+  const tot1 = await page.evaluate(() => window.EPCBom.compute().total);
+  check(Math.abs((tot1 - tot0) - cols * 150 * 150 * 1 * 7.85e-6) < 1e-6, 'Base plate thickness 5 to 6 mm adds ' + (tot1 - tot0).toFixed(3) + ' kg for ' + cols + ' plates');
+  check(!/is the size in your reference BOM/.test(await page.locator('#epcb_out').innerText()), 'The assumed-plate note goes once the plate size is edited');
+  await page.locator('#epcb_plW').fill(''); await page.waitForTimeout(400);
+  const noPl = await page.evaluate(() => ({ plates: window.EPCBom.compute().blocks.map(b => !!b.plate), txt: document.getElementById('epcb_out').innerText }));
+  check(noPl.plates.every(x => !x) && /base plate size is missing or invalid/.test(noPl.txt) && !/BASE PLATE/.test(noPl.txt), 'A missing base plate size removes the plate rows and says so');
+  await page.locator('#epcb_plW').fill('150'); await page.waitForTimeout(400);
+  await page.locator('#epcb_rev').fill('R1'); await page.locator('#epcb_mat').fill('GI'); await page.waitForTimeout(400);
+  check((await page.evaluate(() => window.EPCBom.compute().title)).startsWith('R1_36.18_BOM_') && (await page.locator('#epcb_out table.epcb-t').first().innerText()).includes('GI'), 'Revision and material fields change the BOM');
+  const csv = await page.evaluate(() => ({ csv: window.EPCBom.csv(), total: window.EPCBom.compute().total }));
+  const last = csv.csv.split('\n').pop().split(',');
+  check(csv.csv.split('\n')[0].startsWith('Block,Sr. No.,Parts Name') && Math.abs(parseFloat(last.pop()) - csv.total) < 0.006, 'CSV carries the project total weight');
+  await page.evaluate(() => { window.print = () => { window.__printed2 = 1; }; });
+  await page.locator('#epcb_print').click(); await page.waitForTimeout(500);
+  check(await page.evaluate(() => !!window.__printed2 && document.querySelectorAll('#printSheet .ep-page').length === 4 && document.querySelectorAll('#printSheet .ep-page table.epcb-t').length === 4), 'Print builds one sheet per table');
+  if (process.env.SHOT_DIR) { await page.locator('#epcb_out').screenshot({ path: process.env.SHOT_DIR + '/bom.png' }); }
+  // One failing block must fail the whole analysis and keep BOM and Drawings locked, even when the block on screen passes
+  await page.evaluate(() => { const b = document.getElementById('epca2_blk'); b.value = '2'; b.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.evaluate(() => { const e = document.getElementById('epc_bl0'); e.value = '12000'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(1500);
+  const g2 = await page.evaluate(() => { const a = window.EPCAnalysis.status(), t = id => document.querySelector('#epc_tabs [data-t="' + id + '"]').getAttribute('data-locked'); return { state: a.state, fails: (a.fails || []).join(' | '), blocks: (a.blocks || []).map(b => b.name + ':' + b.state).join(', '), bom: t('bom'), draw: t('draw'), shown: window.EPCAnalysis.result().c.b.name }; });
+  console.log('one tall block:', JSON.stringify(g2).slice(0, 400));
+  check(g2.state === 'fail' && /Main front/.test(g2.fails) && /Tower roof:pass/.test(g2.blocks), 'A failing block fails the whole analysis (' + g2.blocks + ')');
+  check(g2.shown === 'Tower roof' && g2.bom === '1' && g2.draw === '1', 'BOM and Drawings lock while any block fails, although the block on screen (' + g2.shown + ') passes');
+  await page.evaluate(() => { const e = document.getElementById('epc_bl0'); e.value = '1590'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(1500);
+  check((await page.evaluate(() => window.EPCAnalysis.status().state)) === 'pass' && (await page.locator('#epc_tabs [data-t="bom"]').getAttribute('data-locked')) === null, 'Everything unlocks again once every block passes');
+  // Column tie default is the drawn 0.6; a 0.75 saved by the old default is replaced once, a 0.75 saved after this revision is kept
+  for (const [rev, want] of [[undefined, '0.6'], [2, '0.75']]) {
+    const p2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await p2.addInitScript(r => { const o = { colB: '114.3', tieFrac: '0.75' }; if (r) o._rev = r; localStorage.setItem('gs_epc_analysis_v1', JSON.stringify({ '(unnamed)': o, 'Dr Sudhir': o })); }, rev);
+    await p2.goto('http://127.0.0.1:4181/', { waitUntil: 'domcontentloaded' }); await p2.waitForTimeout(1800);
+    await p2.evaluate(() => { window.exploreGuest(); }); await p2.waitForTimeout(300);
+    const v = await p2.locator('#epca2_tieFrac').inputValue();
+    check(v === want, 'Saved tie height 0.75 ' + (rev ? 'with revision ' + rev + ' is kept' : 'from the old default is replaced') + ': ' + v);
+    if (!rev) check(/0\.6 of the column height/.test(await p2.locator('label:has(#epca2_tieFrac)').innerText()), 'Tie height hint says the Layout draws 0.6');
+    await p2.close();
+  }
   check(errors.length === 0, 'No uncaught JavaScript errors: ' + (errors.join(' | ') || 'none'));
 } finally { await browser.close(); await new Promise(r => server.close(r)); }
 if (failures.length) { console.error('\nFAILURES:\n- ' + failures.join('\n- ')); process.exit(1); }
