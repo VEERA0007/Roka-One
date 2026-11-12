@@ -130,7 +130,7 @@
         out.modules=m.length;out.planArea=p.w*p.d;
         if(samples&&obs.length)warn.push(name+': obstacle shadows are not evaluated on a sloped part; only the clearance applies.');
       }else{
-        var lvl=p.level||0,zPlane=lvl+inp.lowMm/1000,polyEN=rect.map(function(q){return sheetToEN(q,inp.top)});
+        var lvl=p.level||0;out.level=lvl;var zPlane=lvl+inp.lowMm/1000,polyEN=rect.map(function(q){return sheetToEN(q,inp.top)});
         var poly2=polyEN.map(function(q){return enToST(q,inp.az)}),ob2=obsEN.map(function(o){return o.map(function(q){return enToST(q,inp.az)})});
         var zones=[];
         if(samples&&samples.s.length)obs.forEach(function(o,oi){
@@ -170,7 +170,46 @@
     if(t.length>MAXBLOCKS)return {error:'There are '+t.length+' tables; Layout takes at most '+MAXBLOCKS+'. Use wider tables or fewer parts.'};
     return {blocks:t.map(function(b){return {name:b.name,rows:b.rows,perRow:b.perRow,low:lowMm}})};
   }
-  window.EPCSurvey={calc:calc,layoutBlocks:layoutBlocks,hull:hull,shadowHull:shadowHull,groupTables:groupTables,sheetToEN:sheetToEN,enToSheet:enToSheet,enToST:enToST,stToEN:stToEN,obstaclePoly:obstaclePoly,MAXBLOCKS:MAXBLOCKS};
+  function convexOverlap(a,b){          /* separating-axis test; touching is not overlap */
+    function axes(p){var o=[];for(var i=0;i<p.length;i++){var j=(i+1)%p.length,dx=p[j][0]-p[i][0],dy=p[j][1]-p[i][1],l=Math.hypot(dx,dy);if(l>1e-12)o.push([-dy/l,dx/l])}return o}
+    var ax=axes(a).concat(axes(b));
+    for(var k=0;k<ax.length;k++){
+      var n=ax[k],a0=1e18,a1=-1e18,b0=1e18,b1=-1e18;
+      a.forEach(function(q){var v=q[0]*n[0]+q[1]*n[1];a0=Math.min(a0,v);a1=Math.max(a1,v)});
+      b.forEach(function(q){var v=q[0]*n[0]+q[1]*n[1];b0=Math.min(b0,v);b1=Math.max(b1,v)});
+      if(a1<=b0+1e-9||b1<=a0+1e-9)return false;
+    }
+    return true;
+  }
+  var MON=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'],MD=[31,28,31,30,31,30,31,31,30,31,30,31];
+  function stampText(w){var m=Math.round(w.h*60),H=Math.floor(m/60),M=m%60,ap=H>=12?'PM':'AM',h12=H%12===0?12:H%12;return {date:w.d+' '+MON[w.m-1],time:h12+':'+('0'+M).slice(-2)+' '+ap}}
+  /* Shadows of the obstacles at one date and solar time. Drawn at datum (roof) level; modules are tested on their own plane
+     (obstacle top minus the part level and low edge), the same rule as the placement. res = calc() result, inp = its input. */
+  function planShade(res,inp,w){
+    var E=window.EPCShadowEngine;
+    if(!res||res.state!=='ok')return {state:'missing',missing:['A valid survey result']};
+    var miss=[];
+    if(!(chk(w.m,1,12)&&w.m===Math.round(w.m)&&chk(w.d,1,MD[Math.round(w.m)-1]||31)&&w.d===Math.round(w.d)))miss.push('Plan date (month and day)');
+    if(!chk(w.h,5,19))miss.push('Plan time (solar hour, 5–19)');
+    if(miss.length)return {state:'missing',missing:miss};
+    var n=E.dayOfYear(w.m-1,w.d),sun=E.sunPos(inp.lat,n,w.h),out={state:'ok',sun:sun,when:w,stamp:stampText(w),night:sun.alt<=0.5,shadows:[],shaded:0,total:0,perTable:[],flushNote:false};
+    var tabs=[];res.parts.forEach(function(pt){if(pt.kind==='flush'){if(pt.modules)out.flushNote=true;return}pt.tables.forEach(function(t){tabs.push({t:t,lvl:pt.level||0,hit:0})})});
+    tabs.forEach(function(x){out.total+=x.t.modules});
+    if(!out.night){
+      res.obstacles.forEach(function(o,oi){
+        var en=o.poly.map(function(q){return sheetToEN(q,res.top)});
+        if(o.h>0)out.shadows.push(shadowHull(en,o.h,[sun]).map(function(q){return enToSheet(q,res.top)}));
+        tabs.forEach(function(x){
+          var hr=o.h-(x.lvl+res.lowMm/1000);if(!(hr>0))return;
+          var z=shadowHull(en,hr,[sun]).map(function(q){return enToSheet(q,res.top)});
+          x.t.cells.forEach(function(c,ci){if(!x.t.hitCells)x.t.hitCells={};if(!x.t.hitCells[ci]&&convexOverlap(c,z))x.t.hitCells[ci]=1});
+        });
+      });
+    }
+    tabs.forEach(function(x){var h=x.t.hitCells?Object.keys(x.t.hitCells).length:0;x.t.hitCells=null;x.hit=h;out.shaded+=h;out.perTable.push({name:x.t.name,modules:x.t.modules,shaded:h})});
+    return out;
+  }
+  window.EPCSurvey={planShade:planShade,convexOverlap:convexOverlap,stampText:stampText,calc:calc,layoutBlocks:layoutBlocks,hull:hull,shadowHull:shadowHull,groupTables:groupTables,sheetToEN:sheetToEN,enToSheet:enToSheet,enToST:enToST,stToEN:stToEN,obstaclePoly:obstaclePoly,MAXBLOCKS:MAXBLOCKS};
 
   /* ================= UI ================= */
   if(typeof document==='undefined'||!document.getElementById)return;
@@ -180,12 +219,12 @@
   function f(x,d){return isFinite(x)?x.toFixed(d):'–'}
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
   function projName(){var e=$('engSite');return e&&e.value.trim()?e.value.trim():'(unnamed)'}
-  var V=blank(),last=null,lastInp=null,timer=null,pend=false;
-  function blank(){return {top:'',topdeg:'',rows:'',low:'',sb:'',cl:'',rg:'0',shade:'',sm:'',sd:'',sf:'9',st:'15',parts:[],obs:[]}}
+  var V=blank(),last=null,lastInp=null,lastPs=null,timer=null,pend=false;
+  function blank(){return {top:'',topdeg:'',rows:'',low:'',sb:'',cl:'',rg:'0',shade:'',sm:'',sd:'',sf:'9',st:'15',pm:'',pd:'',ph:'',parts:[],obs:[]}}
   function loadAll(){try{return JSON.parse(localStorage.getItem(KEY))||{}}catch(e){return {}}}
   function saveVals(){var a=loadAll();a[projName()]=V;try{localStorage.setItem(KEY,JSON.stringify(a))}catch(e){}}
   function loadVals(){var o=loadAll()[projName()];V=blank();if(o){Object.keys(V).forEach(function(k){if(o[k]!==undefined)V[k]=o[k]})}fillInputs();renderRows()}
-  var SIMPLE=['top','topdeg','rows','low','sb','cl','rg','shade','sm','sd','sf','st'];
+  var SIMPLE=['top','topdeg','rows','low','sb','cl','rg','shade','sm','sd','sf','st','pm','pd','ph'];
   function fillInputs(){SIMPLE.forEach(function(k){var e=$('epcv_'+k);if(e)e.value=V[k]});showHide()}
   function showHide(){
     var o=$('epcv_topdeg');if(o)o.parentNode.hidden=V.top!=='other';
@@ -206,11 +245,12 @@
   }
 
   /* ---- top view (sheet orientation, so it can be compared with the paper) ---- */
-  function svgView(r,inp,print){
+  function svgView(r,inp,print,ps){
     var pts=[];
     inp.parts.forEach(function(p){rectPts(p.x,p.y,p.w,p.d).forEach(function(z){pts.push(z)})});
     r.obstacles.forEach(function(o){o.poly.forEach(function(z){pts.push(z)})});
     r.parts.forEach(function(p){p.zones.forEach(function(zn){zn.forEach(function(z){pts.push(z)})})});
+    if(ps&&ps.state==='ok')ps.shadows.forEach(function(zn){zn.forEach(function(z){pts.push(z)})});
     var x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;pts.forEach(function(z){x0=Math.min(x0,z[0]);x1=Math.max(x1,z[0]);y0=Math.min(y0,z[1]);y1=Math.max(y1,z[1])});
     var pad=1.2,W=900,sc=(W-60)/Math.max(1,x1-x0+2*pad),H=Math.max(200,(y1-y0+2*pad)*sc+40);
     function X(x){return 30+(x-x0+pad)*sc}function Y(y){return H-20-(y-y0+pad)*sc}
@@ -225,6 +265,11 @@
       if(p.kind==='flush')p.cells.forEach(function(c){h+=poly(c,'fill="#3f6fe0" stroke="#fff" stroke-width=".6"')});
       else p.tables.forEach(function(t){t.cells.forEach(function(c){h+=poly(c,'fill="#2f5fd0" stroke="#fff" stroke-width=".6"')});h+=poly(t.corners,'fill="none" stroke="#0d2a7a" stroke-width="1.2"')});
     });
+    if(ps&&ps.state==='ok'){
+      ps.shadows.forEach(function(z){h+=poly(z,'fill="#000" fill-opacity=".38" stroke="none"')});
+      r.parts.forEach(function(p){p.tables.forEach(function(t){var cx=0,cy=0;t.corners.forEach(function(z){cx+=z[0]/4;cy+=z[1]/4});h+='<text x="'+X(cx).toFixed(1)+'" y="'+(Y(cy)+9).toFixed(1)+'" font-size="26" font-weight="800" fill="#fff" stroke="#0d2a7a" stroke-width="1" paint-order="stroke" text-anchor="middle">'+t.modules+'</text>'})});
+      h+='<g transform="translate('+(W-190)+','+(H-60).toFixed(0)+')"><rect width="180" height="48" fill="#fff" stroke="#222"/><text x="8" y="19" font-size="14" font-weight="800">DATE : '+ps.stamp.date+'</text><text x="8" y="39" font-size="14" font-weight="800">TIME : '+ps.stamp.time+'</text></g>';
+    }
     inp.parts.forEach(function(p,i){var rp=r.parts[i];if(!rp)return;h+='<text x="'+(X(p.x)+5).toFixed(1)+'" y="'+(Y(p.y+p.d)+15).toFixed(1)+'" font-size="13" font-weight="700" fill="#111">'+esc(rp.name)+' · '+rp.modules+' modules</text>'});
     r.obstacles.forEach(function(o){var cx=0,cy=0;o.poly.forEach(function(z){cx+=z[0];cy+=z[1]});cx/=o.poly.length;cy/=o.poly.length;h+='<text x="'+X(cx).toFixed(1)+'" y="'+Y(cy).toFixed(1)+'" font-size="11" text-anchor="middle" fill="#111">'+esc(o.name)+' H='+f(o.h,1)+'</text>'});
     /* compass: north and south as they point on the sheet */
@@ -251,12 +296,22 @@
     else h+='<p style="margin:6px 0"><small>Obstacle shadows are NOT applied (clearance only).</small></p>';
     r.warnings.forEach(function(w){h+='<div class="epca-warnings" style="margin:6px 0">'+esc(w)+'</div>'});
     h+='<div style="margin:10px 0">'+svgView(r,inp)+'</div>';
+    var ps=planShade(r,inp,{m:num(V.pm),d:num(V.pd),h:num(V.ph)});lastPs=ps;
+    h+='<h3 style="margin:14px 0 4px;font-size:15px">Plan with shadows</h3>';
+    if(ps.state!=='ok')h+='<div class="epca-warnings">Enter the plan date and solar time below the shadow rule to draw the shadows. Still needed: '+ps.missing.map(esc).join('; ')+'.</div>';
+    else{
+      h+='<p style="margin:6px 0"><b>'+ps.stamp.date+', '+ps.stamp.time+' (solar time): '+(ps.night?'the sun is below the horizon, no shadows.':'sun altitude '+f(ps.sun.alt,1)+'°, azimuth '+f(ps.sun.az,0)+'°. '+ps.shaded+' of '+ps.total+' table modules are touched by obstacle shadow at this moment.')+'</b></p>';
+      ps.perTable.forEach(function(t){if(t.shaded)h+='<small>'+esc(t.name)+': '+t.shaded+' of '+t.modules+' modules shaded. </small>'});
+      h+='<div style="margin:10px 0">'+svgView(r,inp,false,ps)+'</div><p class="ep-note">Shadows are drawn at roof (datum) level from the obstacle heights you entered; module shading is tested on each module plane (obstacle top minus part level and low-edge height). One instant only, solar time (equation of time ignored). Neighbouring buildings count only if entered as obstacles.'+(ps.flushNote?' Flush parts are not checked for shadow.':'')+'</p>';
+      h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_printplan">Print plan with shadows</button></div>';
+    }
     var lb=layoutBlocks(r,r.lowMm);
     h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_apply"'+(r.modules?'':' disabled')+'>Use '+f(r.kwp,2)+' kWp as the Site target capacity</button> <button class="btn sm" type="button" id="epcv_send"'+(lb.error?' disabled':'')+'>Send '+(lb.blocks?lb.blocks.length:0)+' table(s) to Layout</button> <button class="btn alt sm" type="button" id="epcv_print">Print / Save as PDF</button> <span class="ep-note" id="epcv_msg">'+(lb.error&&r.tables.length===0?'':(lb.error?esc(lb.error):''))+'</span></div>';
     h+='<p class="ep-note">Preliminary count from hand-measured data. Sending to Layout replaces all current Layout blocks (asked once more before it happens); flush parts are counted only and are not part of the steel structure. Structure, wind and shadow checks still apply and nothing here is approved.</p>';
     out.innerHTML=h;
     $('epcv_apply').onclick=function(){var e=$('engCapacity');if(!e)return;e.value=r.kwp.toFixed(2);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))};
-    $('epcv_print').onclick=printPlan;
+    $('epcv_print').onclick=function(){printPlan(false)};
+    var pp=$('epcv_printplan');if(pp)pp.onclick=function(){printPlan(true)};
     var sb=$('epcv_send');if(sb)sb.onclick=function(){
       var m=$('epcv_msg');
       if(!pend){pend=true;sb.textContent='Click again to replace the Layout blocks';if(m)m.textContent='This replaces every block in Layout and the analysis will be run again.';setTimeout(function(){pend=false;var b=$('epcv_send');if(b&&lb.blocks)b.textContent='Send '+lb.blocks.length+' table(s) to Layout'},6000);return}
@@ -267,13 +322,13 @@
       if(m)m.textContent=e?e:'Sent '+lb.blocks.length+' block(s) to Layout. Open Layout to check them; Wind & Structure and Analysis use them now.';
     };
   }
-  function printPlan(){
-    var r=last;if(!r||r.state!=='ok')return;
+  function printPlan(withShade){
+    var r=last;if(!r||r.state!=='ok')return;var ps=withShade&&lastPs&&lastPs.state==='ok'?lastPs:null;
     var d=new Date().toLocaleDateString('en-IN');
     var rows=r.parts.map(function(p,i){return '<tr><td>'+esc(p.name)+'</td><td>'+(p.kind==='flush'?'Flush':'Tables')+'</td><td align="right">'+p.modules+'</td><td align="right">'+f(r.partsKwp[i],2)+'</td></tr>'}).join('');
-    var html='<div class="ep-page"><div class="ep-ph"><b>'+esc(projName())+'</b><span>Roof survey plan</span><span>'+d+'</span></div><div class="ep-pb" style="flex-direction:column;align-items:stretch">'+svgView(r,lastInp,true)+
+    var html='<div class="ep-page"><div class="ep-ph"><b>'+esc(projName())+'</b><span>Roof survey plan</span><span>'+d+'</span></div><div class="ep-pb" style="flex-direction:column;align-items:stretch">'+svgView(r,lastInp,true,ps)+
       '<table style="font-size:12px;margin-top:8px;border-collapse:collapse"><thead><tr><th align="left">Part</th><th align="left">Type</th><th align="right">Modules</th><th align="right">kWp</th></tr></thead><tbody>'+rows+'<tr style="font-weight:700"><td>Total</td><td></td><td align="right">'+r.modules+'</td><td align="right">'+f(r.kwp,2)+'</td></tr></tbody></table></div>'+
-      '<div class="ep-pf">PRELIMINARY – NOT FOR CONSTRUCTION. Count from hand-measured survey data; the roof survey governs. '+(r.shadow?'Obstacle shadows kept clear on day '+r.shadow.day+' of the year, '+f(r.shadow.from,2)+'–'+f(r.shadow.to,2)+' solar h.':'Obstacle shadows not applied.')+'</div></div>';
+      '<div class="ep-pf">PRELIMINARY – NOT FOR CONSTRUCTION. Count from hand-measured survey data; the roof survey governs. '+(ps?'Shadows at '+ps.stamp.date+', '+ps.stamp.time+' solar time ('+ps.shaded+' of '+ps.total+' table modules touched). ':'')+(r.shadow?'Obstacle shadows kept clear on day '+r.shadow.day+' of the year, '+f(r.shadow.from,2)+'–'+f(r.shadow.to,2)+' solar h.':'Obstacle shadows not applied.')+'</div></div>';
     $('printSheet').innerHTML=html;
     setTimeout(function(){try{var N=window.GenSolarNative;if(N&&typeof N.printPdfLandscape==='function')N.printPdfLandscape();else if(N&&typeof N.printPdf==='function')N.printPdf();else window.print()}catch(e){}},300);
   }
@@ -327,6 +382,7 @@
       '<label>Extra row gap (m)<input id="epcv_rg" type="number" min="0" step="0.05" inputmode="decimal"></label>'+
       '<label>Obstacle shadow rule<select id="epcv_shade"><option value="">Select…</option><option value="off">Clearance only (no shadow check)</option><option value="crit">Critical day, shade-free window of Shadow analysis</option><option value="custom">Chosen date and time window</option></select></label></div>'+
       '<div id="epcv_custom" class="epcv-g" hidden><label>Month (1–12)<input id="epcv_sm" type="number" min="1" max="12" step="1"></label><label>Day<input id="epcv_sd" type="number" min="1" max="31" step="1"></label><label>From (solar hour)<input id="epcv_sf" type="number" min="5" max="19" step="0.25"></label><label>To (solar hour)<input id="epcv_st" type="number" min="5" max="19" step="0.25"></label></div>'+
+      '<div class="epcv-g"><label>Plan shadow date: month (1–12)<input id="epcv_pm" type="number" min="1" max="12" step="1" placeholder="e.g. 6"></label><label>Day<input id="epcv_pd" type="number" min="1" max="31" step="1" placeholder="e.g. 21"></label><label>Plan time (solar hour, 24 h)<input id="epcv_ph" type="number" min="5" max="19" step="0.25" placeholder="e.g. 10"></label></div>'+
       '<h3 style="margin:14px 0 4px;font-size:15px">Roof parts</h3><div id="epcv_parts"></div><button class="btn alt sm" type="button" id="epcv_addPart">+ Add part</button>'+
       '<h3 style="margin:14px 0 4px;font-size:15px">Obstacles and shadow casters</h3><div id="epcv_obs"></div><button class="btn alt sm" type="button" id="epcv_addObs">+ Add obstacle</button>'+
       '<h3 style="margin:14px 0 4px;font-size:15px">Result</h3><div id="epcv_out" aria-live="polite"></div></div>';

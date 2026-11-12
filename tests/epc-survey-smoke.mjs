@@ -52,6 +52,14 @@ try {
   const withShade = await page.evaluate(() => window.EPCSurvey.state().modules);
   check(withShade < noShade, 'The winter shadow of a 6 m tower removes modules: ' + noShade + ' -> ' + withShade);
   check((await page.locator('#epcv_out').innerText()).includes('Shadow zones are the outer envelope'), 'Shadow rule is stated on the result');
+  /* plan with shadows */
+  check((await page.locator('#epcv_out').innerText()).includes('Enter the plan date'), 'Plan with shadows asks for date and time first');
+  await setv(page, '#epcv_pm', '12'); await setv(page, '#epcv_pd', '21'); await setv(page, '#epcv_ph', '9'); await page.waitForTimeout(700);
+  const ptxt = await page.locator('#epcv_out').innerText();
+  check(ptxt.includes('21 DECEMBER') && ptxt.includes('9:00 AM') && /table modules are touched by obstacle shadow/.test(ptxt), 'Plan states the date, time and shaded count');
+  check(await page.locator('#epcv_out svg text:has-text("DATE : 21 DECEMBER")').count() === 1, 'Date and time stamp is drawn on the plan');
+  const pst = await page.evaluate(() => window.EPCSurvey.state().modules);
+  check(pst > 0 && await page.locator('#epcv_printplan').count() === 1, 'Print plan button is offered');
   /* send to Layout: two clicks needed */
   await page.selectOption('#epcv_shade', 'off'); await page.waitForTimeout(600);
   const expect = await page.evaluate(() => window.EPCSurvey.state().tables.map(t => [t.rows, t.perRow]));
@@ -67,7 +75,7 @@ try {
   check(blocksBefore !== JSON.stringify(blocks), 'Layout blocks changed only after the second click');
   await page.locator('#epc_tabs [data-t="layout"]').click();
   check(await page.locator('#epc_bn0').inputValue() === blocks[0].name, 'Layout tab shows the new first block');
-  if (process.env.SHOT) { await page.locator('#epc_tabs [data-t="survey"]').click(); await page.waitForTimeout(500); await page.locator('#epcv_out svg').screenshot({ path: process.env.SHOT }); }
+  if (process.env.SHOT) { await page.locator('#epc_tabs [data-t="survey"]').click(); await page.waitForTimeout(500); await page.locator('#epcv_out svg').last().screenshot({ path: process.env.SHOT }); }
   /* survey is kept per project */
   await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForTimeout(2200);
   const kept = await page.evaluate(() => { const a = JSON.parse(localStorage.getItem('gs_epc_survey_v1') || '{}'); return Object.keys(a).map(k => a[k].parts.length); });

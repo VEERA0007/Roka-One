@@ -95,4 +95,28 @@ const fake={state:'ok',tables:new Array(31).fill({name:'t',rows:2,perRow:3})};ok
 
 /* 8 hull */
 const h=S.hull([[0,0],[1,0],[1,1],[0,1],[.5,.5]]);ok('hull of a square with an inner point has 4 vertices',h.length===4);
+
+/* 9 plan with shadows at a chosen date and time */
+let sx=S.stampText({m:6,d:21,h:10});ok('stamp 21 JUNE 10:00 AM',sx.date==='21 JUNE'&&sx.time==='10:00 AM',JSON.stringify(sx));
+sx=S.stampText({m:12,d:5,h:15.5});ok('stamp 5 DECEMBER 3:30 PM',sx.date==='5 DECEMBER'&&sx.time==='3:30 PM');
+sx=S.stampText({m:3,d:1,h:12});ok('stamp noon is 12:00 PM',sx.time==='12:00 PM');
+const sq=(x,y,w)=>[[x,y],[x+w,y],[x+w,y+w],[x,y+w]];
+ok('overlapping squares overlap',S.convexOverlap(sq(0,0,2),sq(1,1,2)));
+ok('touching squares do not overlap',!S.convexOverlap(sq(0,0,2),sq(2,0,2)));
+ok('separate squares do not overlap',!S.convexOverlap(sq(0,0,1),sq(3,3,1)));
+ok('rotated diamond clear of a square corner',!S.convexOverlap([[0,0],[2,0],[2,2],[0,2]],[[2.9,1],[3.9,0],[4.9,1],[3.9,2]])&&S.convexOverlap([[0,0],[2,0],[2,2],[0,2]],[[1.9,1],[2.9,0],[3.9,1],[2.9,2]]));
+let i9=base();i9.parts=[{name:'A',x:0,y:0,w:30,d:30,kind:'table',level:0}];i9.rows=1;i9.lowMm=0;i9.sb=0.3;i9.cl=0.3;
+i9.obs=[{name:'tower',shape:'box',x:14,y:20,w:2,d:2,h:6}];
+r=S.calc(i9);
+const W9={m:12,d:21,h:9},ps=S.planShade(r,i9,W9);
+const sp9=E.sunPos(LAT,E.dayOfYear(11,21),9),L9=6/Math.tan(sp9.alt*R),sh=[-L9*Math.sin(sp9.az*R),-L9*Math.cos(sp9.az*R)];
+const base9=[[14,20],[16,20],[16,22],[14,22]],hullHand=S.hull(base9.concat(base9.map(q=>[q[0]+sh[0],q[1]+sh[1]])));
+ok('plan state ok, sun altitude '+sp9.alt.toFixed(1),ps.state==='ok'&&near(ps.sun.alt,sp9.alt,1e-9));
+let hand=0;r.tables.forEach(t=>t.cells.forEach(c=>{let hit=false;for(let i=0;i<=14&&!hit;i++)for(let j=0;j<=14&&!hit;j++){
+  const u=(i+.5)/15,v=(j+.5)/15,a=[c[0][0]+(c[1][0]-c[0][0])*u+(c[3][0]-c[0][0])*v,c[0][1]+(c[1][1]-c[0][1])*u+(c[3][1]-c[0][1])*v];if(P.inPoly(a,hullHand))hit=true}if(hit)hand++}));
+ok('shaded module count matches an independent point-sampling count',ps.shaded===hand&&hand>0,ps.shaded+' vs '+hand);
+ok('shaded <= total and total equals the table modules',ps.shaded<=ps.total&&ps.total===r.tableModules);
+const night=S.planShade(r,i9,{m:12,d:21,h:5});ok('night: no shadows and nothing shaded',night.night&&night.shaded===0&&night.shadows.length===0);
+ok('missing date or time is a lock',S.planShade(r,i9,{m:13,d:1,h:10}).state==='missing'&&S.planShade(r,i9,{m:6,d:31,h:10}).state==='missing'&&S.planShade(r,i9,{m:6,d:21,h:NaN}).state==='missing');
+i9.lowMm=7000;r=S.calc(i9);ok('obstacle below the module low edge shades no module',S.planShade(r,i9,W9).shaded===0);
 console.log(fail?'\n'+fail+' FAILED':'\nall survey checks passed');process.exit(fail?1:0);
