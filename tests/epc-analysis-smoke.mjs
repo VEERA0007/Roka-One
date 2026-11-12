@@ -55,6 +55,10 @@ try {
   await page.screenshot({ path: process.env.SHOT || '/tmp/an_plan.png', fullPage: false });
   const pages = await page.evaluate(() => window.EPCAnalysis.drawings().length);
   check(pages >= 8, 'Drawing sheets are generated: ' + pages);
+  const info = await page.evaluate(() => { const d = window.EPCAnalysis.drawings(), n = window.EPCAnalysis.runs().filter(Boolean).length; const names = {}; d.forEach(x => { names[x.block] = (names[x.block] || 0) + 1; }); return { n, names, total: d.length, last: d[d.length - 1].html }; });
+  const counts = Object.values(info.names);
+  check(Object.keys(info.names).length === info.n && counts.every(c => c >= 8), 'Drawings cover every analysed block with a full set of sheets each: ' + JSON.stringify(info.names));
+  check(info.last.includes('Sheet ' + info.total + ' of ' + info.total), 'Sheets are numbered through the whole set');
   await page.evaluate(() => { window.print = () => { window.__printed = 1; }; });
   await page.locator('#epca2_print').click(); await page.waitForTimeout(500);
   check(await page.evaluate(() => !!window.__printed && document.querySelectorAll('#printSheet .ep-page').length >= 8), 'Print builds the drawing sheets');

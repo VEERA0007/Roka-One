@@ -196,16 +196,15 @@
   }
 
   /* ---------- drawings ---------- */
-  function sheet(title,body,n,total,r,eng){
+  function sheet(title,body,n,total,block,eng){
     var d=new Date().toLocaleDateString('en-IN');
-    return '<div class="ep-page"><div class="ep-ph"><b>'+esc(projName())+' · '+esc(result.block||'')+'</b><span>'+esc(title)+'</span><span>Sheet '+n+' of '+total+' · '+d+'</span></div><div class="ep-pb">'+body+'</div><div class="ep-pf">PRELIMINARY – NOT FOR CONSTRUCTION. First-order linear analysis, IS 800 limit state. Structural engineer to verify and sign off. '+(eng?'Engineer: '+esc(eng)+'.':'Engineer: not entered.')+'</div></div>';
+    return '<div class="ep-page"><div class="ep-ph"><b>'+esc(projName())+' · '+esc(block||'')+'</b><span>'+esc(title)+'</span><span>Sheet '+n+' of '+total+' · '+d+'</span></div><div class="ep-pb">'+body+'</div><div class="ep-pf">PRELIMINARY – NOT FOR CONSTRUCTION. First-order linear analysis, IS 800 limit state. Structural engineer to verify and sign off. '+(eng?'Engineer: '+esc(eng)+'.':'Engineer: not entered.')+'</div></div>';
   }
   function tableSvgHtml(head,rows){
     return '<table class="ep-memb" style="font-size:10px;width:100%"><thead><tr>'+head.map(function(h){return '<th>'+esc(h)+'</th>'}).join('')+'</tr></thead><tbody>'+rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+esc(c)+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table>';
   }
-  function drawings(){
-    var r=run;if(!r)return [];
-    var W=window.EPCWind.status(),eng=($('epcw_eng')||{}).value||'';
+  function pagesFor(r){
+    var W=window.EPCWind.status();
     var worst=r.ULS.reduce(function(b,c){var u=0;r.segs.forEach(function(sg){if(sg.combo===c.name&&sg.util>u)u=sg.util});return u>b.u?{n:c.name,u:u}:b},{n:r.ULS[0].name,u:-1}).n;
     var fx=(r.c.x0)/1000,mid=Math.floor(r.c.nRaf/2),fm=(r.c.x0+mid*r.c.fs)/1000;
     var pages=[];
@@ -221,7 +220,14 @@
     var per=22,np=Math.ceil(rows.length/per);
     for(var p=0;p<np;p++)pages.push(['Member schedule '+(p+1)+'/'+np,tableSvgHtml(head,rows.slice(p*per,(p+1)*per))]);
     pages.push(['Base reactions and anchors',tableSvgHtml(['Base','x m','y m','Uplift kN','Compr. kN','Shear kN','Moment kNm','Anchor util.'],r.reacts.map(function(b,i){return [i+1,f(b.p[0],2),f(b.p[1],2),f(b.uplift,2),f(b.comp,2),f(b.shear,2),f(b.moment,2),f(b.anchorUtil,2)]}))]);
-    return pages.map(function(p,i){return {title:p[0],html:sheet(p[0],p[1],i+1,pages.length,r,eng)}});
+    return pages;
+  }
+  /* Every block gets its own full set of sheets, numbered through the whole set. */
+  function drawings(){
+    if(!run||!runs.length)return [];
+    var eng=($('epcw_eng')||{}).value||'',all=[],nm=function(i){var l=layout();return (l&&l.blocks&&l.blocks[i]&&l.blocks[i].name)||('Block '+(i+1))};
+    runs.forEach(function(r,i){if(!r)return;pagesFor(r).forEach(function(p){all.push({block:nm(i),title:p[0],body:p[1]})})});
+    return all.map(function(p,i){return {block:p.block,title:p.title,html:sheet(p.title,p.body,i+1,all.length,p.block,eng)}});
   }
   function printDrawings(){
     var pg=drawings();if(!pg.length)return;
@@ -246,7 +252,7 @@
     h+='<h4 style="margin:12px 0 4px">Member checks (IS 800, γm0 = 1.10)</h4>'+summary(x)+
       '<div class="meta">Frame sway '+f(x.sway.val,1)+' / '+f(x.sway.lim,1)+' mm '+pill(x.sway.util<=1)+'</div>'+allMembers(x);
     h+='<h4 style="margin:12px 0 4px">Base reactions (envelope of the four ultimate combinations)</h4>'+reactTable(x);
-    h+='<h4 style="margin:12px 0 4px">Engineering drawings</h4><div class="meta">Plan, frame elevation, 3D, moment and axial diagrams, deformed shape, member schedule and base reactions.</div><button type="button" class="btn sm" id="epca2_print">Print / Save drawings as PDF</button>';
+    h+='<h4 style="margin:12px 0 4px">Engineering drawings</h4><div class="meta">Plan, frame elevation, 3D, moment and axial diagrams, deformed shape, member schedule and base reactions, for every block ('+(r.blocks?r.blocks.length:1)+' block'+((r.blocks&&r.blocks.length>1)?'s':'')+').</div><button type="button" class="btn sm" id="epca2_print">Print / Save drawings as PDF</button>';
     if(x.warn.length)h+='<div class="epca-warnings" style="margin-top:10px">'+x.warn.map(esc).join('<br>')+'</div>';
     h+='<div class="epca-warnings" style="margin-top:10px"><b>Not covered (engineer must verify):</b> second-order (P-Δ and P-δ) effects and member amplification, lateral-torsional buckling, connection and base-plate design, torsion, net-section and block-shear, fatigue, seismic loads, wind on the supporting structure itself and wind from other directions, roof capacity, foundations. Member self-weight of columns, braces and ties is not added (the structure allowance on the Wind tab covers purlins and rafters). Rafter-to-column and purlin-to-rafter joints are modelled rigid. Axial, bending and shear are checked with a linear interaction.</div>';
     out.innerHTML=h;
