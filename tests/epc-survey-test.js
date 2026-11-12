@@ -119,4 +119,23 @@ ok('shaded <= total and total equals the table modules',ps.shaded<=ps.total&&ps.
 const night=S.planShade(r,i9,{m:12,d:21,h:5});ok('night: no shadows and nothing shaded',night.night&&night.shaded===0&&night.shadows.length===0);
 ok('missing date or time is a lock',S.planShade(r,i9,{m:13,d:1,h:10}).state==='missing'&&S.planShade(r,i9,{m:6,d:31,h:10}).state==='missing'&&S.planShade(r,i9,{m:6,d:21,h:NaN}).state==='missing');
 i9.lowMm=7000;r=S.calc(i9);ok('obstacle below the module low edge shades no module',S.planShade(r,i9,W9).shaded===0);
+
+/* 10 isometric model */
+let pj=S.project([0,0,0],0,32),pz=S.project([0,0,1],0,32);
+ok('a point 1 m higher appears cos(el) higher on screen',near(pj.y-pz.y,Math.cos(32*R),1e-12)&&near(pj.x,pz.x,1e-12));
+let pf=S.project([0,5,0],0,32);ok('sheet-up is farther from the viewer at view angle 0',pf.d>pj.d&&pf.y<pj.y);
+let pr=S.project([4,0,0],90,32);ok('view rotated 90 deg: sheet-right becomes depth',near(pr.x,0,1e-9)&&near(pr.d,-4,1e-9),JSON.stringify(pr));
+let iA=base();iA.parts=[{name:'A',x:0,y:0,w:12,d:20,kind:'table',level:0}];iA.obs=[{name:'box',shape:'box',x:4,y:9,w:2,d:2,h:3}];iA.lowMm=1000;
+r=S.calc(iA);
+const t0=r.tables[0],dS9=2.278,sinT=Math.sin(15*R);
+ok('first row: back edge is the table top, front edge is lower by one module slope',near(t0.cellZ[0][0],t0.zBack,1e-12)&&near(t0.cellZ[0][0]-t0.cellZ[0][1],dS9*sinT,1e-9));
+ok('table low edge height equals the low-edge input',near(t0.zFront,1.0,1e-12)&&near(t0.cellZ[t0.cellZ.length-1][1],1.0,1e-9),t0.cellZ[t0.cellZ.length-1][1]);
+ok('table top height = low edge + slant depth x sin(tilt)',near(t0.zBack,1.0+(2*dS9+.02)*sinT,1e-9),t0.zBack);
+const mo=S.isoModel(r,iA,null,0,32),nm=mo.faces.filter(f=>f.kind==='module').length;
+ok('one drawn quad per module',nm===r.modules,nm+' vs '+r.modules);
+ok('box obstacle has 4 sides and a top',mo.faces.filter(f=>f.kind==='obsSide').length===4&&mo.faces.filter(f=>f.kind==='obsTop').length===1);
+let sorted=true;for(let i=1;i<mo.faces.length;i++)if(mo.faces[i].depth>mo.faces[i-1].depth+1e-12)sorted=false;
+ok('faces are sorted far to near',sorted);
+ok('module quads are tilted (corner heights differ across the slope)',mo.faces.filter(f=>f.kind==='module').every(f=>f.pts[0][2]>f.pts[2][2]));
+ok('every post goes from the roof to the table edge height',mo.lines.length===4*r.tables.length&&mo.lines.every(l=>l.pts[0][2]===0&&l.pts[1][2]>=1.0-1e-9));
 console.log(fail?'\n'+fail+' FAILED':'\nall survey checks passed');process.exit(fail?1:0);
