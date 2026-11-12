@@ -34,15 +34,23 @@
     d=Math.min(d,distPointSeg(r.s0,r.t0,a,b),distPointSeg(r.s1,r.t0,a,b),distPointSeg(r.s1,r.t1,a,b),distPointSeg(r.s0,r.t1,a,b));
     return d;
   }
-  function validCell(r,poly,obs,setback,clear){
+  /* An edge that passes through the cell is always a violation, even at zero setback or clearance
+     (distSegRect returns 0 for both "crossing" and "touching", so zero needs the explicit test). */
+  function tooClose(a,b,r,c){return crossesInterior(a,b,r)||distSegRect(a,b,r)<c-EPS}
+  function validCell(r,poly,obs,setback,clear,shade){
     var cx=(r.s0+r.s1)/2,cy=(r.t0+r.t1)/2;
     if(!inPoly([cx,cy],poly))return false;
     var n=poly.length,i;
-    for(i=0;i<n;i++){if(distSegRect(poly[i],poly[(i+1)%n],r)<setback-EPS)return false}
+    for(i=0;i<n;i++){if(tooClose(poly[i],poly[(i+1)%n],r,setback))return false}
     for(var k=0;k<obs.length;k++){
       var o=obs[k],m=o.length;
       if(inPoly([cx,cy],o))return false;
-      for(i=0;i<m;i++){if(distSegRect(o[i],o[(i+1)%m],r)<clear-EPS)return false}
+      for(i=0;i<m;i++){if(tooClose(o[i],o[(i+1)%m],r,clear))return false}
+    }
+    if(shade)for(k=0;k<shade.length;k++){        /* shadow zones: no overlap, touching allowed, no clearance added */
+      var sp=shade[k],q=sp.length;
+      if(inPoly([cx,cy],sp))return false;
+      for(i=0;i<q;i++){if(tooClose(sp[i],sp[(i+1)%q],r,0))return false}
     }
     return true;
   }
@@ -56,7 +64,7 @@
       for(var t=t0;t+o.d<=tmax+EPS;t+=stepT){
         for(var s=s0;s+o.w<=smax+EPS;s+=stepS){
           var r={s0:s,s1:s+o.w,t0:t,t1:t+o.d};
-          if(validCell(r,poly,obs,o.setback,o.clear))mods.push([s,t]);
+          if(validCell(r,poly,obs,o.setback,o.clear,o.shade))mods.push([s,t]);
         }
       }
       if(!best||mods.length>best.length)best=mods;

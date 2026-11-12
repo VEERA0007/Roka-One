@@ -1,0 +1,359 @@
+/* EPC Survey: roof parts and obstacles from the site-survey sheet -> module placement, counts and Layout blocks.
+   Geometry only. The sheet is hand measured, so everything here is a planning count: the roof survey governs and
+   nothing is approved. Elevated tables use the shadow-free row pitch of the shadow engine; flush (shed) parts are counted only.
+   Frames: sheet (x right, y up, metres) -> compass (e east, n north) using the bearing of the sheet top -> row frame (s along rows, t toward the array azimuth). */
+(function(){
+  'use strict';
+  var RAD=Math.PI/180,KEY='gs_epc_survey_v1',MAXBLOCKS=30;
+
+  /* ================= engine ================= */
+  function sheetToEN(p,top){var b=top*RAD;return [p[0]*Math.cos(b)+p[1]*Math.sin(b),-p[0]*Math.sin(b)+p[1]*Math.cos(b)]}
+  function enToSheet(p,top){var b=top*RAD;return [p[0]*Math.cos(b)-p[1]*Math.sin(b),p[0]*Math.sin(b)+p[1]*Math.cos(b)]}
+  function enToST(p,az){var g=az*RAD;return [p[0]*Math.cos(g)-p[1]*Math.sin(g),p[0]*Math.sin(g)+p[1]*Math.cos(g)]}
+  function stToEN(p,az){var g=az*RAD;return [p[0]*Math.cos(g)+p[1]*Math.sin(g),-p[0]*Math.sin(g)+p[1]*Math.cos(g)]}
+  function rectPts(x,y,w,d){return [[x,y],[x+w,y],[x+w,y+d],[x,y+d]]}
+  function hull(pts){
+    var p=pts.slice().sort(function(a,b){return a[0]-b[0]||a[1]-b[1]});if(p.length<3)return p;
+    function cr(o,a,b){return (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0])}
+    var lo=[],up=[],i;
+    for(i=0;i<p.length;i++){while(lo.length>1&&cr(lo[lo.length-2],lo[lo.length-1],p[i])<=0)lo.pop();lo.push(p[i])}
+    for(i=p.length-1;i>=0;i--){while(up.length>1&&cr(up[up.length-2],up[up.length-1],p[i])<=0)up.pop();up.push(p[i])}
+    lo.pop();up.pop();return lo.concat(up);
+  }
+  function obstaclePoly(o){          /* sheet frame; round = circumscribed 24-gon (never smaller than the real object) */
+    if(o.shape==='round'){
+      var r=o.w/2/Math.cos(Math.PI/24),cx=o.x+o.w/2,cy=o.y+o.w/2,a=[];
+      for(var i=0;i<24;i++)a.push([cx+r*Math.cos(2*Math.PI*i/24),cy+r*Math.sin(2*Math.PI*i/24)]);
+      return a;
+    }
+    return rectPts(o.x,o.y,o.w,o.d);
+  }
+  function sunSamples(inp,E){          /* [{alt,az}] on the chosen day, every 15 min */
+    var sh=inp.shade,out=[],n,h1,h2;
+    if(sh.mode==='crit'){n=E.criticalDay(inp.lat);h1=inp.window[0];h2=inp.window[1]}
+    else{n=E.dayOfYear(sh.m-1,sh.d);h1=sh.from;h2=sh.to}
+    for(var h=h1;h<=h2+1e-9;h+=0.25){var s=E.sunPos(inp.lat,n,h);if(s.alt>0.5)out.push({alt:s.alt,az:s.az,h:h})}
+    return {s:out,day:n,from:h1,to:h2};
+  }
+  /* Shadow of a vertical prism on a horizontal plane: footprint swept along the shadow vector. Envelope of all sample times
+     (convex hull, so slightly larger than the true area: safe side). pts and result are in the compass (e,n) frame. */
+  function shadowHull(pts,hr,samples){
+    var all=pts.slice();
+    samples.forEach(function(s){
+      var L=hr/Math.tan(s.alt*RAD),de=-L*Math.sin(s.az*RAD),dn=-L*Math.cos(s.az*RAD);
+      pts.forEach(function(p){all.push([p[0]+de,p[1]+dn])});
+    });
+    return hull(all);
+  }
+  function groupTables(mods,w,gapM){      /* mods = [s,t] cells (one module wide); runs of adjacent cells in one band = one table */
+    var by={};mods.forEach(function(m){var k=m[1].toFixed(4);(by[k]=by[k]||[]).push(m)});
+    var out=[],step=w+gapM;
+    Object.keys(by).map(parseFloat).sort(function(a,b){return a-b}).forEach(function(tk){
+      var row=by[tk.toFixed(4)].sort(function(a,b){return a[0]-b[0]}),run=[row[0]];
+      for(var i=1;i<=row.length;i++){
+        if(i<row.length&&Math.abs(row[i][0]-row[i-1][0]-step)<1e-6)run.push(row[i]);
+        else{out.push({s0:run[0][0],t0:run[0][1],per:run.length});if(i<row.length)run=[row[i]]}
+      }
+    });
+    return out;
+  }
+  function chk(v,lo,hi){return typeof v==='number'&&isFinite(v)&&v>=lo&&v<=hi}
+
+  function calc(inp){
+    var P=window.EPCPlaceEngine,E=window.EPCShadowEngine,miss=[],warn=[];
+    if(!P||!E)return {state:'missing',missing:['Placement or shadow engine not loaded']};
+    if(!chk(inp.top,0,360))miss.push('Direction of the sheet top (which way the "Point South" arrow points)');
+    if(!chk(inp.lat,-60,60))miss.push('Latitude on Site (−60 to 60)');
+    if(!chk(inp.az,0,360))miss.push('Array azimuth on Site');
+    if(!chk(inp.tilt,0,60))miss.push('Array tilt on Site (0–60°)');
+    if(!(inp.mod&&inp.mod.l>0&&inp.mod.w>0))miss.push('Module length and width (Auto Design)');
+    if(!(inp.mod&&inp.mod.wp>0))miss.push('Module Wp');
+    if(!chk(inp.gapMm,0,200))miss.push('Gap between modules (Layout, 0–200 mm)');
+    var parts=(inp.parts||[]).filter(function(p){return p.use!==false}),obs=inp.obs||[];
+    var hasTable=parts.some(function(p){return p.kind!=='flush'});
+    if(!parts.length)miss.push('At least one roof part (name, position and size from the sheet)');
+    if(!chk(inp.sb,0,50))miss.push('Edge setback (m)');
+    if(!chk(inp.cl,0,50))miss.push('Obstacle clearance (m)');
+    if(!chk(inp.rg,0,50))miss.push('Extra row gap (m, 0 if none)');
+    if(hasTable){
+      if(!(inp.rows>=1&&inp.rows<=8&&inp.rows===Math.round(inp.rows)))miss.push('Modules up the slope per table (whole number, 1–8)');
+      if(!chk(inp.lowMm,0,10000))miss.push('Low-edge column height (mm, from the sheet\'s structure height)');
+    }
+    var sh=inp.shade||{};
+    if(sh.mode!=='off'&&sh.mode!=='crit'&&sh.mode!=='custom')miss.push('Obstacle shadow rule');
+    else if(sh.mode==='custom'){
+      if(!(chk(sh.m,1,12)&&sh.m===Math.round(sh.m)&&chk(sh.d,1,31)&&sh.d===Math.round(sh.d)))miss.push('Shadow date (month and day)');
+      if(!(chk(sh.from,5,19)&&chk(sh.to,5,19)&&sh.from<=sh.to))miss.push('Shadow time window (solar hours, start not after end)');
+    }else if(sh.mode==='crit'&&!(inp.window&&inp.window[0]>=6&&inp.window[1]<=18&&inp.window[0]<inp.window[1]))miss.push('Shade-free window (Shadow analysis)');
+    parts.forEach(function(p,i){
+      var nm=p.name||('Part '+(i+1));
+      if(!(p.w>0&&p.d>0)||!isFinite(p.x)||!isFinite(p.y))miss.push(nm+': position and size');
+      if(p.kind==='flush'){
+        if(['up','down','left','right'].indexOf(p.dir)<0)miss.push(nm+': direction the roof falls');
+        if(!chk(p.slope,0,45))miss.push(nm+': roof slope (0–45°)');
+      }
+      if(p.level!==undefined&&!chk(p.level,-50,100))miss.push(nm+': level above the datum');
+    });
+    obs.forEach(function(o,i){
+      var nm=o.name||('Obstacle '+(i+1));
+      if(!(o.w>0)||(o.shape!=='round'&&!(o.d>0))||!isFinite(o.x)||!isFinite(o.y))miss.push(nm+': position and size');
+      if(!chk(o.h,0,200))miss.push(nm+': height above the datum (0 = keep-out area only)');
+    });
+    if(miss.length)return {state:'missing',missing:miss};
+
+    var gapM=inp.gapMm/1000,port=inp.mod.port,mw=inp.mod.w,ml=inp.mod.l;
+    var wAcross=port?mw:ml,dSlope=port?ml:mw,k=inp.rows||1;
+    var res={state:'ok',warnings:warn,parts:[],obstacles:[],tables:[],top:inp.top,az:inp.az,tilt:inp.tilt,wp:inp.mod.wp,rows:k,lowMm:inp.lowMm};
+    var obsEN=obs.map(function(o){return obstaclePoly(o).map(function(p){return sheetToEN(p,inp.top)})});
+    var samples=null;
+    if(sh.mode!=='off'){samples=sunSamples(inp,E);res.shadow={day:samples.day,from:samples.from,to:samples.to,mode:sh.mode};if(!samples.s.length)warn.push('The sun is below the horizon for the whole shadow window, so no obstacle shadow was applied.')}
+    var rp=null,pitch=0,dPlan=0,tilt=inp.tilt;
+    if(hasTable){
+      var depthSlope=k*dSlope+(k-1)*gapM;
+      rp=E.rowPitch(inp.lat,E.criticalDay(inp.lat),inp.window[0],inp.window[1],depthSlope,tilt,inp.az);
+      if(!rp.usable)return {state:'missing',missing:['The shade-free window has no sunshine on the critical day']};
+      pitch=rp.pitch+inp.rg;dPlan=depthSlope*Math.cos(tilt*RAD);
+      res.pitch=pitch;res.minPitch=rp.pitch;res.depthSlope=depthSlope;res.dPlan=dPlan;
+    }
+    parts.forEach(function(p,pi){
+      var name=p.name||('Part '+(pi+1)),rect=rectPts(p.x,p.y,p.w,p.d),out={name:name,kind:p.kind==='flush'?'flush':'table',modules:0,tables:[],cells:[],zones:[],area:p.w*p.d};
+      if(p.kind==='flush'){
+        var c=Math.cos(p.slope*RAD),dir=p.dir,ud=(dir==='up'||dir==='down');
+        /* plane coordinates: u across the slope, v along it (stretched by 1/cos slope) */
+        var toPl=function(q){var a=q[0]-p.x,b=q[1]-p.y;return ud?[a,b/c]:[b,a/c]};
+        var fromPl=function(u,v){return ud?[p.x+u,p.y+v*c]:[p.x+v*c,p.y+u]};
+        var poly=rect.map(toPl),ob=obs.map(function(o){return obstaclePoly(o).map(toPl)});
+        var face={up:[0,1],down:[0,-1],left:[-1,0],right:[1,0]}[dir],fe=sheetToEN(face,inp.top);
+        out.slope=p.slope;out.facing=((Math.atan2(fe[0],fe[1])/RAD)%360+360)%360;
+        var m=P.fit(poly,ob,{w:wAcross,d:dSlope,gap:gapM,pitch:dSlope+gapM,setback:inp.sb,clear:inp.cl});
+        m.forEach(function(q){out.cells.push([[q[0],q[1]],[q[0]+wAcross,q[1]],[q[0]+wAcross,q[1]+dSlope],[q[0],q[1]+dSlope]].map(function(z){return fromPl(z[0],z[1])}))});
+        out.modules=m.length;out.planArea=p.w*p.d;
+        if(samples&&obs.length)warn.push(name+': obstacle shadows are not evaluated on a sloped part; only the clearance applies.');
+      }else{
+        var lvl=p.level||0,zPlane=lvl+inp.lowMm/1000,polyEN=rect.map(function(q){return sheetToEN(q,inp.top)});
+        var poly2=polyEN.map(function(q){return enToST(q,inp.az)}),ob2=obsEN.map(function(o){return o.map(function(q){return enToST(q,inp.az)})});
+        var zones=[];
+        if(samples&&samples.s.length)obs.forEach(function(o,oi){
+          var hr=o.h-zPlane;if(!(hr>0))return;
+          var hz=shadowHull(obsEN[oi],hr,samples.s);out.zones.push(hz.map(function(q){return enToSheet(q,inp.top)}));
+          zones.push(hz.map(function(q){return enToST(q,inp.az)}));
+        });
+        var m2=P.fit(poly2,ob2,{w:wAcross,d:dPlan,gap:gapM,pitch:pitch,setback:inp.sb,clear:inp.cl,shade:zones});
+        var tabs=groupTables(m2,wAcross,gapM),cosT=Math.cos(tilt*RAD);
+        tabs.forEach(function(t,ti){
+          var tw=t.per*wAcross+(t.per-1)*gapM;
+          var corners=[[t.s0,t.t0],[t.s0+tw,t.t0],[t.s0+tw,t.t0+dPlan],[t.s0,t.t0+dPlan]].map(function(z){return enToSheet(stToEN(z,inp.az),inp.top)});
+          var cells=[];
+          for(var r=0;r<k;r++)for(var cI=0;cI<t.per;cI++){
+            var s1=t.s0+cI*(wAcross+gapM),t1=t.t0+r*(dSlope+gapM)*cosT;
+            cells.push([[s1,t1],[s1+wAcross,t1],[s1+wAcross,t1+dSlope*cosT],[s1,t1+dSlope*cosT]].map(function(z){return enToSheet(stToEN(z,inp.az),inp.top)}));
+          }
+          var tb={name:name+' T'+(ti+1),rows:k,perRow:t.per,modules:k*t.per,corners:corners,cells:cells,part:name};
+          out.tables.push(tb);res.tables.push(tb);
+        });
+        out.modules=k*m2.length;out.bands=Object.keys(m2.reduce(function(a,q){a[q[1].toFixed(4)]=1;return a},{})).length;
+      }
+      res.parts.push(out);
+    });
+    res.obstacles=obs.map(function(o,i){return {name:o.name||('Obstacle '+(i+1)),poly:obstaclePoly(o),h:o.h,shape:o.shape}});
+    var tm=0,fm=0;res.parts.forEach(function(p){if(p.kind==='flush')fm+=p.modules;else tm+=p.modules});
+    res.tableModules=tm;res.flushModules=fm;res.modules=tm+fm;res.kwp=res.modules*inp.mod.wp/1000;
+    res.partsKwp=res.parts.map(function(p){return p.modules*inp.mod.wp/1000});
+    if(res.modules===0)warn.push('No module fits with these sizes, setbacks and shadow rule.');
+    return res;
+  }
+  /* Layout blocks for the elevated tables only (one block per table, so steel quantities are never under-counted). */
+  function layoutBlocks(res,lowMm){
+    if(!res||res.state!=='ok')return {error:'No survey result'};
+    var t=res.tables;
+    if(!t.length)return {error:'There are no elevated tables to send'};
+    if(t.length>MAXBLOCKS)return {error:'There are '+t.length+' tables; Layout takes at most '+MAXBLOCKS+'. Use wider tables or fewer parts.'};
+    return {blocks:t.map(function(b){return {name:b.name,rows:b.rows,perRow:b.perRow,low:lowMm}})};
+  }
+  window.EPCSurvey={calc:calc,layoutBlocks:layoutBlocks,hull:hull,shadowHull:shadowHull,groupTables:groupTables,sheetToEN:sheetToEN,enToSheet:enToSheet,enToST:enToST,stToEN:stToEN,obstaclePoly:obstaclePoly,MAXBLOCKS:MAXBLOCKS};
+
+  /* ================= UI ================= */
+  if(typeof document==='undefined'||!document.getElementById)return;
+  function $(id){return document.getElementById(id)}
+  function q(s){return document.querySelector(s)}
+  function nv(sel){var e=(sel.charAt(0)==='#'||sel.charAt(0)==='[')?q(sel):$(sel);if(!e||e.value==='')return NaN;var x=parseFloat(e.value);return isFinite(x)?x:NaN}
+  function f(x,d){return isFinite(x)?x.toFixed(d):'–'}
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+  function projName(){var e=$('engSite');return e&&e.value.trim()?e.value.trim():'(unnamed)'}
+  var V=blank(),last=null,lastInp=null,timer=null,pend=false;
+  function blank(){return {top:'',topdeg:'',rows:'',low:'',sb:'',cl:'',rg:'0',shade:'',sm:'',sd:'',sf:'9',st:'15',parts:[],obs:[]}}
+  function loadAll(){try{return JSON.parse(localStorage.getItem(KEY))||{}}catch(e){return {}}}
+  function saveVals(){var a=loadAll();a[projName()]=V;try{localStorage.setItem(KEY,JSON.stringify(a))}catch(e){}}
+  function loadVals(){var o=loadAll()[projName()];V=blank();if(o){Object.keys(V).forEach(function(k){if(o[k]!==undefined)V[k]=o[k]})}fillInputs();renderRows()}
+  var SIMPLE=['top','topdeg','rows','low','sb','cl','rg','shade','sm','sd','sf','st'];
+  function fillInputs(){SIMPLE.forEach(function(k){var e=$('epcv_'+k);if(e)e.value=V[k]});showHide()}
+  function showHide(){
+    var o=$('epcv_topdeg');if(o)o.parentNode.hidden=V.top!=='other';
+    var c=$('epcv_custom');if(c)c.hidden=V.shade!=='custom';
+  }
+  function topDeg(){var m={down:0,right:90,up:180,left:270};if(V.top==='other'){var x=parseFloat(V.topdeg);return isFinite(x)?x:NaN}return m[V.top]!==undefined?m[V.top]:NaN}
+  function num(s){var x=parseFloat(s);return isFinite(x)?x:NaN}
+
+  function gather(){
+    var port=($('epca_orientation')||{}).value!=='landscape',gap=nv('[data-k="gap"]');
+    var h1=nv('epcs_h1'),h2=nv('epcs_h2');if(!(h1>=6&&h2<=18&&h1<h2)){h1=9;h2=15}
+    return {top:topDeg(),lat:nv('engLat'),az:nv('engAzimuth'),tilt:nv('engTilt'),
+      mod:{l:nv('epca_module_l'),w:nv('epca_module_w'),wp:nv('epca_wp'),port:port},gapMm:isFinite(gap)?gap:0,
+      rows:num(V.rows),lowMm:num(V.low),sb:num(V.sb),cl:num(V.cl),rg:num(V.rg),window:[h1,h2],
+      shade:{mode:V.shade,m:num(V.sm),d:num(V.sd),from:num(V.sf),to:num(V.st)},
+      parts:V.parts.map(function(p){return {name:p.name,x:num(p.x),y:num(p.y),w:num(p.w),d:num(p.d),kind:p.kind,level:p.level===''||p.level===undefined?0:num(p.level),dir:p.dir,slope:num(p.slope),use:p.use!==false}}),
+      obs:V.obs.map(function(o){return {name:o.name,shape:o.shape,x:num(o.x),y:num(o.y),w:num(o.w),d:o.shape==='round'?num(o.w):num(o.d),h:num(o.h)}})};
+  }
+
+  /* ---- top view (sheet orientation, so it can be compared with the paper) ---- */
+  function svgView(r,inp,print){
+    var pts=[];
+    inp.parts.forEach(function(p){rectPts(p.x,p.y,p.w,p.d).forEach(function(z){pts.push(z)})});
+    r.obstacles.forEach(function(o){o.poly.forEach(function(z){pts.push(z)})});
+    r.parts.forEach(function(p){p.zones.forEach(function(zn){zn.forEach(function(z){pts.push(z)})})});
+    var x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;pts.forEach(function(z){x0=Math.min(x0,z[0]);x1=Math.max(x1,z[0]);y0=Math.min(y0,z[1]);y1=Math.max(y1,z[1])});
+    var pad=1.2,W=900,sc=(W-60)/Math.max(1,x1-x0+2*pad),H=Math.max(200,(y1-y0+2*pad)*sc+40);
+    function X(x){return 30+(x-x0+pad)*sc}function Y(y){return H-20-(y-y0+pad)*sc}
+    function poly(a,attr){return '<polygon points="'+a.map(function(z){return X(z[0]).toFixed(1)+','+Y(z[1]).toFixed(1)}).join(' ')+'" '+attr+'/>'}
+    var h='<svg viewBox="0 0 '+W+' '+H.toFixed(0)+'" class="epsvg" role="img" aria-label="Top view of the roof survey" style="width:100%;background:#fff;color:#222"><defs><pattern id="epcvHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#d84315" stroke-width="1.2"/></pattern></defs>';
+    var gx;for(gx=Math.ceil(x0-pad);gx<=x1+pad;gx++)h+='<line x1="'+X(gx).toFixed(1)+'" y1="10" x2="'+X(gx).toFixed(1)+'" y2="'+(H-10).toFixed(1)+'" stroke="#e3e6ea" stroke-width=".6"/>';
+    for(gx=Math.ceil(y0-pad);gx<=y1+pad;gx++)h+='<line x1="10" y1="'+Y(gx).toFixed(1)+'" x2="'+(W-10)+'" y2="'+Y(gx).toFixed(1)+'" stroke="#e3e6ea" stroke-width=".6"/>';
+    inp.parts.forEach(function(p,i){h+=poly(rectPts(p.x,p.y,p.w,p.d),'fill="'+(p.kind==='flush'?'#fff3e0':'#eef2f6')+'" stroke="#667" stroke-width="1.4"')});
+    r.parts.forEach(function(p){p.zones.forEach(function(zn){h+=poly(zn,'fill="url(#epcvHatch)" fill-opacity=".45" stroke="#d84315" stroke-width=".8" stroke-dasharray="4 3"')})});
+    r.obstacles.forEach(function(o){h+=poly(o.poly,'fill="#9aa3ad" stroke="#333" stroke-width="1.2"')});
+    r.parts.forEach(function(p){
+      if(p.kind==='flush')p.cells.forEach(function(c){h+=poly(c,'fill="#3f6fe0" stroke="#fff" stroke-width=".6"')});
+      else p.tables.forEach(function(t){t.cells.forEach(function(c){h+=poly(c,'fill="#2f5fd0" stroke="#fff" stroke-width=".6"')});h+=poly(t.corners,'fill="none" stroke="#0d2a7a" stroke-width="1.2"')});
+    });
+    inp.parts.forEach(function(p,i){var rp=r.parts[i];if(!rp)return;h+='<text x="'+(X(p.x)+5).toFixed(1)+'" y="'+(Y(p.y+p.d)+15).toFixed(1)+'" font-size="13" font-weight="700" fill="#111">'+esc(rp.name)+' · '+rp.modules+' modules</text>'});
+    r.obstacles.forEach(function(o){var cx=0,cy=0;o.poly.forEach(function(z){cx+=z[0];cy+=z[1]});cx/=o.poly.length;cy/=o.poly.length;h+='<text x="'+X(cx).toFixed(1)+'" y="'+Y(cy).toFixed(1)+'" font-size="11" text-anchor="middle" fill="#111">'+esc(o.name)+' H='+f(o.h,1)+'</text>'});
+    /* compass: north and south as they point on the sheet */
+    var nx=-Math.sin(r.top*RAD),ny=Math.cos(r.top*RAD),cx0=W-60,cy0=50;
+    h+='<g stroke="#b00020" fill="#b00020"><line x1="'+cx0+'" y1="'+cy0+'" x2="'+(cx0+nx*30).toFixed(1)+'" y2="'+(cy0-ny*30).toFixed(1)+'" stroke-width="2.5"/><text x="'+(cx0+nx*40-5).toFixed(1)+'" y="'+(cy0-ny*40+5).toFixed(1)+'" font-size="14" font-weight="700" stroke="none">N</text></g>';
+    h+='<g stroke="#555" fill="#555"><line x1="'+cx0+'" y1="'+cy0+'" x2="'+(cx0-nx*30).toFixed(1)+'" y2="'+(cy0+ny*30).toFixed(1)+'" stroke-width="1.5"/><text x="'+(cx0-nx*40-4).toFixed(1)+'" y="'+(cy0+ny*40+5).toFixed(1)+'" font-size="12" stroke="none">S</text></g>';
+    h+='<text x="14" y="'+(H-4).toFixed(0)+'" font-size="11" fill="#555">Grid = 1 m. Sheet orientation (top of the sheet is up). Preliminary plan from hand-measured data.</text>';
+    return h+'</svg>';
+  }
+
+  function render(){
+    var out=$('epcv_out');if(!out)return;
+    var inp=gather(),r=calc(inp);last=r;lastInp=inp;
+    if(r.state==='missing'){out.innerHTML='<div class="epca-warnings"><b>Panel count not available yet.</b> Still needed:<ul style="margin:6px 0 0 18px">'+r.missing.map(function(m){return '<li>'+esc(m)+'</li>'}).join('')+'</ul></div>';return}
+    var tgt=nv('engCapacity'),wp=r.wp,need=tgt>0?Math.ceil(tgt*1000/wp-1e-9):NaN;
+    var h='<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><thead><tr><th align="left">Part</th><th align="left">Type</th><th align="right">Tables</th><th align="right">Modules</th><th align="right">kWp</th></tr></thead><tbody>';
+    r.parts.forEach(function(p,i){h+='<tr style="border-top:1px solid var(--line)"><td>'+esc(p.name)+'</td><td>'+(p.kind==='flush'?'Flush on slope, '+f(p.slope,0)+'° facing '+f(p.facing,0)+'°':'Elevated tables')+'</td><td align="right">'+(p.kind==='flush'?'–':p.tables.length)+'</td><td align="right">'+p.modules+'</td><td align="right">'+f(r.partsKwp[i],2)+'</td></tr>'});
+    h+='<tr style="border-top:2px solid var(--line);font-weight:700"><td>Total</td><td></td><td align="right">'+r.tables.length+'</td><td align="right">'+r.modules+'</td><td align="right">'+f(r.kwp,2)+'</td></tr></tbody></table></div>';
+    if(isFinite(need))h+='<p style="margin:8px 0"><b>Target '+f(tgt,2)+' kWp needs '+need+' modules of '+f(wp,0)+' Wp. The roof fits '+r.modules+' ('+f(r.kwp,2)+' kWp): '+(r.modules>=need?'enough room, '+(r.modules-need)+' spare.':'<span style="color:#b3261e">short by '+(need-r.modules)+' modules.</span>')+'</b></p>';
+    if(r.tables.length){
+      h+='<p style="margin:6px 0"><small>Elevated tables: '+r.rows+' row'+(r.rows>1?'s':'')+' up the slope, row pitch '+f(r.pitch,3)+' m (shadow-free '+f(r.minPitch,3)+' m on the critical day, '+inp.window[0]+':00 to '+inp.window[1]+':00, plus extra gap), tilt '+f(r.tilt,0)+'°, azimuth '+f(r.az,0)+'°, low edge '+f(r.lowMm,0)+' mm.</small></p>';
+    }
+    if(r.shadow)h+='<p style="margin:6px 0"><small>Obstacle shadows were kept clear on day '+r.shadow.day+' of the year between '+f(r.shadow.from,2)+' and '+f(r.shadow.to,2)+' solar hours (hatched on the plan). Shadow zones are the outer envelope, a little larger than the true shadow. Outside this window modules can still be shaded.</small></p>';
+    else h+='<p style="margin:6px 0"><small>Obstacle shadows are NOT applied (clearance only).</small></p>';
+    r.warnings.forEach(function(w){h+='<div class="epca-warnings" style="margin:6px 0">'+esc(w)+'</div>'});
+    h+='<div style="margin:10px 0">'+svgView(r,inp)+'</div>';
+    var lb=layoutBlocks(r,r.lowMm);
+    h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_apply"'+(r.modules?'':' disabled')+'>Use '+f(r.kwp,2)+' kWp as the Site target capacity</button> <button class="btn sm" type="button" id="epcv_send"'+(lb.error?' disabled':'')+'>Send '+(lb.blocks?lb.blocks.length:0)+' table(s) to Layout</button> <button class="btn alt sm" type="button" id="epcv_print">Print / Save as PDF</button> <span class="ep-note" id="epcv_msg">'+(lb.error&&r.tables.length===0?'':(lb.error?esc(lb.error):''))+'</span></div>';
+    h+='<p class="ep-note">Preliminary count from hand-measured data. Sending to Layout replaces all current Layout blocks (asked once more before it happens); flush parts are counted only and are not part of the steel structure. Structure, wind and shadow checks still apply and nothing here is approved.</p>';
+    out.innerHTML=h;
+    $('epcv_apply').onclick=function(){var e=$('engCapacity');if(!e)return;e.value=r.kwp.toFixed(2);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))};
+    $('epcv_print').onclick=printPlan;
+    var sb=$('epcv_send');if(sb)sb.onclick=function(){
+      var m=$('epcv_msg');
+      if(!pend){pend=true;sb.textContent='Click again to replace the Layout blocks';if(m)m.textContent='This replaces every block in Layout and the analysis will be run again.';setTimeout(function(){pend=false;var b=$('epcv_send');if(b&&lb.blocks)b.textContent='Send '+lb.blocks.length+' table(s) to Layout'},6000);return}
+      pend=false;
+      if(!window.EPCLayout||!window.EPCLayout.setBlocks){if(m)m.textContent='Layout is not available';return}
+      var e=window.EPCLayout.setBlocks(lb.blocks);
+      sb.textContent='Send '+lb.blocks.length+' table(s) to Layout';
+      if(m)m.textContent=e?e:'Sent '+lb.blocks.length+' block(s) to Layout. Open Layout to check them; Wind & Structure and Analysis use them now.';
+    };
+  }
+  function printPlan(){
+    var r=last;if(!r||r.state!=='ok')return;
+    var d=new Date().toLocaleDateString('en-IN');
+    var rows=r.parts.map(function(p,i){return '<tr><td>'+esc(p.name)+'</td><td>'+(p.kind==='flush'?'Flush':'Tables')+'</td><td align="right">'+p.modules+'</td><td align="right">'+f(r.partsKwp[i],2)+'</td></tr>'}).join('');
+    var html='<div class="ep-page"><div class="ep-ph"><b>'+esc(projName())+'</b><span>Roof survey plan</span><span>'+d+'</span></div><div class="ep-pb" style="flex-direction:column;align-items:stretch">'+svgView(r,lastInp,true)+
+      '<table style="font-size:12px;margin-top:8px;border-collapse:collapse"><thead><tr><th align="left">Part</th><th align="left">Type</th><th align="right">Modules</th><th align="right">kWp</th></tr></thead><tbody>'+rows+'<tr style="font-weight:700"><td>Total</td><td></td><td align="right">'+r.modules+'</td><td align="right">'+f(r.kwp,2)+'</td></tr></tbody></table></div>'+
+      '<div class="ep-pf">PRELIMINARY – NOT FOR CONSTRUCTION. Count from hand-measured survey data; the roof survey governs. '+(r.shadow?'Obstacle shadows kept clear on day '+r.shadow.day+' of the year, '+f(r.shadow.from,2)+'–'+f(r.shadow.to,2)+' solar h.':'Obstacle shadows not applied.')+'</div></div>';
+    $('printSheet').innerHTML=html;
+    setTimeout(function(){try{var N=window.GenSolarNative;if(N&&typeof N.printPdfLandscape==='function')N.printPdfLandscape();else if(N&&typeof N.printPdf==='function')N.printPdf();else window.print()}catch(e){}},300);
+  }
+
+  /* ---- parts / obstacles tables ---- */
+  var PF=[['name','text','Name'],['x','number','X (m)'],['y','number','Y (m)'],['w','number','Width (m)'],['d','number','Depth (m)']];
+  function inpH(list,i,k,type,ph,val,extra){return '<input data-'+list+'="'+i+'.'+k+'" type="'+type+'"'+(type==='number'?' step="any" inputmode="decimal"':'')+' aria-label="'+esc(ph)+'" placeholder="'+esc(ph)+'" value="'+esc(val===undefined?'':val)+'"'+(extra||'')+'>'}
+  function renderRows(){
+    var pe=$('epcv_parts'),oe=$('epcv_obs');if(!pe||!oe)return;
+    var h='';
+    V.parts.forEach(function(p,i){
+      h+='<div class="epcv-row"><label class="epcv-use"><input type="checkbox" data-part="'+i+'.use"'+(p.use!==false?' checked':'')+' aria-label="Use this part"> use</label>'+
+        PF.map(function(c){return inpH('part',i,c[0],c[1],c[2],p[c[0]])}).join('')+
+        '<select data-part="'+i+'.kind" aria-label="Part type"><option value="table"'+(p.kind!=='flush'?' selected':'')+'>Elevated tables</option><option value="flush"'+(p.kind==='flush'?' selected':'')+'>Flush on slope</option></select>'+
+        inpH('part',i,'level','number','Level above datum (m)',p.level)+
+        (p.kind==='flush'?'<select data-part="'+i+'.dir" aria-label="Roof falls toward"><option value="">Falls toward…</option>'+['up','down','left','right'].map(function(d){return '<option value="'+d+'"'+(p.dir===d?' selected':'')+'>Falls toward sheet '+d+'</option>'}).join('')+'</select>'+inpH('part',i,'slope','number','Slope (°)',p.slope):'')+
+        '<button class="btn x" type="button" data-delpart="'+i+'" aria-label="Remove part">×</button></div>';
+    });
+    pe.innerHTML=h?'<p class="ep-note">Each row: use · name · X · Y · width · depth (m) · type · level above datum (m)'+(V.parts.some(function(p){return p.kind==="flush"})?' · falls toward · slope (°)':'')+'</p>'+h:'<p class="ep-note">No parts yet. Add each roof area you can put modules on.</p>';
+    h='';
+    V.obs.forEach(function(o,i){
+      h+='<div class="epcv-row">'+inpH('obs',i,'name','text','Name',o.name)+
+        '<select data-obs="'+i+'.shape" aria-label="Shape"><option value="rect"'+(o.shape!=='round'?' selected':'')+'>Box</option><option value="round"'+(o.shape==='round'?' selected':'')+'>Round</option></select>'+
+        inpH('obs',i,'x','number','X (m)',o.x)+inpH('obs',i,'y','number','Y (m)',o.y)+inpH('obs',i,'w','number',o.shape==='round'?'Diameter (m)':'Width (m)',o.w)+
+        (o.shape==='round'?'':inpH('obs',i,'d','number','Depth (m)',o.d))+inpH('obs',i,'h','number','Height above datum (m)',o.h)+
+        '<button class="btn x" type="button" data-delobs="'+i+'" aria-label="Remove obstacle">×</button></div>';
+    });
+    oe.innerHTML=h?'<p class="ep-note">Each row: name · shape · X · Y · width (diameter if round) · depth (m) · top height above datum (m)</p>'+h:'<p class="ep-note">No obstacles. Add tanks, lift rooms, sheds, towers, parapets and neighbouring buildings (height 0 = keep-out area only).</p>';
+  }
+  function onField(e){
+    var t=e.target;if(!t||!t.getAttribute)return;
+    var id=t.id||'',ps=t.getAttribute('data-part'),os=t.getAttribute('data-obs');
+    if(id.indexOf('epcv_')===0&&SIMPLE.indexOf(id.slice(5))>=0){V[id.slice(5)]=t.value;showHide()}
+    else if(ps||os){var a=(ps||os).split('.'),L=ps?V.parts:V.obs,it=L[+a[0]];if(!it)return;it[a[1]]=t.type==='checkbox'?t.checked:t.value;if(e.type==='change'&&(a[1]==='kind'||a[1]==='shape'))renderRows()}
+    else return;
+    saveVals();sched();
+  }
+  function sched(){clearTimeout(timer);timer=setTimeout(render,200)}
+  function mount(){
+    var sec=$('epc_p-survey');if(!sec||$('epcv'))return false;
+    var st=document.createElement('style');
+    st.textContent='#epcv .epcv-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0}#epcv label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}#epcv .epcv-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0;padding:6px;border:1px solid var(--line);border-radius:10px}#epcv .epcv-row input[type=text],#epcv .epcv-row input[type=number],#epcv .epcv-row select{width:110px;min-width:0}#epcv .epcv-use{flex-direction:row;align-items:center}';
+    document.head.appendChild(st);
+    var h='<div id="epcv"><h2>Roof survey: parts and panel count</h2><p class="ep-note">Type what the survey sheet shows: each roof part you can use and each obstacle, with positions measured from one corner of the sheet. Position X is measured to the right and Y upward on the sheet, in metres, to the lower-left corner of the part or obstacle. Heights are measured from one datum (the main terrace floor). Latitude, tilt, azimuth, module and gap come from Site, Auto Design and Layout.</p>'+
+      '<div class="epcv-g"><label>Which way does the "Point South" arrow on the sheet point?<select id="epcv_top"><option value="">Select…</option><option value="down">Down (top of sheet = North)</option><option value="right">Right (top of sheet = East)</option><option value="up">Up (top of sheet = South)</option><option value="left">Left (top of sheet = West)</option><option value="other">Other angle…</option></select></label>'+
+      '<label hidden>Compass bearing of the top of the sheet (°)<input id="epcv_topdeg" type="number" min="0" max="360" step="1" inputmode="decimal"></label>'+
+      '<label>Modules up the slope per table<input id="epcv_rows" type="number" min="1" max="8" step="1" inputmode="numeric" placeholder="Required, e.g. 2"></label>'+
+      '<label>Low-edge column height (mm)<input id="epcv_low" type="number" min="0" step="10" inputmode="decimal" placeholder="Required (1.5 ft = 457 mm)"></label>'+
+      '<label>Edge setback (m)<input id="epcv_sb" type="number" min="0" step="0.05" inputmode="decimal" placeholder="Required"></label>'+
+      '<label>Obstacle clearance (m)<input id="epcv_cl" type="number" min="0" step="0.05" inputmode="decimal" placeholder="Required"></label>'+
+      '<label>Extra row gap (m)<input id="epcv_rg" type="number" min="0" step="0.05" inputmode="decimal"></label>'+
+      '<label>Obstacle shadow rule<select id="epcv_shade"><option value="">Select…</option><option value="off">Clearance only (no shadow check)</option><option value="crit">Critical day, shade-free window of Shadow analysis</option><option value="custom">Chosen date and time window</option></select></label></div>'+
+      '<div id="epcv_custom" class="epcv-g" hidden><label>Month (1–12)<input id="epcv_sm" type="number" min="1" max="12" step="1"></label><label>Day<input id="epcv_sd" type="number" min="1" max="31" step="1"></label><label>From (solar hour)<input id="epcv_sf" type="number" min="5" max="19" step="0.25"></label><label>To (solar hour)<input id="epcv_st" type="number" min="5" max="19" step="0.25"></label></div>'+
+      '<h3 style="margin:14px 0 4px;font-size:15px">Roof parts</h3><div id="epcv_parts"></div><button class="btn alt sm" type="button" id="epcv_addPart">+ Add part</button>'+
+      '<h3 style="margin:14px 0 4px;font-size:15px">Obstacles and shadow casters</h3><div id="epcv_obs"></div><button class="btn alt sm" type="button" id="epcv_addObs">+ Add obstacle</button>'+
+      '<h3 style="margin:14px 0 4px;font-size:15px">Result</h3><div id="epcv_out" aria-live="polite"></div></div>';
+    sec.innerHTML=h;
+    return true;
+  }
+  function init(){
+    if(!window.EPCPlaceEngine||!window.EPCShadowEngine||!mount())return;
+    var sec=$('epc_p-survey');
+    loadVals();
+    sec.addEventListener('input',onField);sec.addEventListener('change',onField);
+    sec.addEventListener('click',function(e){
+      var t=e.target;if(!t.getAttribute)return;
+      if(t.id==='epcv_addPart'){V.parts.push({use:true,name:'Part '+String.fromCharCode(65+V.parts.length%26),kind:'table',x:'',y:'',w:'',d:'',level:'0',dir:'',slope:''});renderRows();saveVals();sched()}
+      else if(t.id==='epcv_addObs'){V.obs.push({name:'Obstacle '+(V.obs.length+1),shape:'rect',x:'',y:'',w:'',d:'',h:''});renderRows();saveVals();sched()}
+      else if(t.getAttribute('data-delpart')!==null){V.parts.splice(+t.getAttribute('data-delpart'),1);renderRows();saveVals();sched()}
+      else if(t.getAttribute('data-delobs')!==null){V.obs.splice(+t.getAttribute('data-delobs'),1);renderRows();saveVals();sched()}
+    });
+    var root=$('epcRoot')||document;
+    root.addEventListener('input',function(e){var t=e.target;if(!t||sec.contains(t))return;if(t.id==='engSite')saveVals();sched()},true);
+    root.addEventListener('change',function(e){if(!sec.contains(e.target))sched()},true);
+    document.addEventListener('epc:linked',sched);
+    var ps=$('epc_projSel');if(ps)ps.addEventListener('change',function(){setTimeout(function(){loadVals();sched()},70)});
+    ['epc_newProj','epc_loadRef'].forEach(function(id){var b=$(id);if(b)b.addEventListener('click',function(){setTimeout(function(){loadVals();sched()},160)})});
+    render();
+  }
+  window.EPCSurvey.state=function(){return last};
+  function boot(){setTimeout(init,120)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+})();

@@ -9,6 +9,8 @@ on:
       - "tests/epc-analysis-smoke.mjs"
       - "tests/epc-thin-test.js"
       - "tests/epc-bom-test.js"
+      - "tests/epc-survey-test.js"
+      - "tests/epc-survey-smoke.mjs"
       - ".github/workflows/android-ui-smoke.yml"
   pull_request:
     paths:
@@ -17,6 +19,8 @@ on:
       - "tests/epc-analysis-smoke.mjs"
       - "tests/epc-thin-test.js"
       - "tests/epc-bom-test.js"
+      - "tests/epc-survey-test.js"
+      - "tests/epc-survey-smoke.mjs"
       - ".github/workflows/android-ui-smoke.yml"
   workflow_dispatch:
 
@@ -44,3 +48,5 @@ jobs:
           node tests/epc-fem-test.js
           node tests/epc-thin-test.js
           node tests/epc-bom-test.js
+          node tests/epc-survey-test.js
+          node tests/epc-survey-smoke.mjs

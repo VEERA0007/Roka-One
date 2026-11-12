@@ -591,6 +591,7 @@ html,body{margin:0;height:100%;background:#fff}
         <div id="epc_st-eng">
           <div class="ep-tabs" role="tablist" id="epc_tabs">
             <button class="tab" role="tab" data-t="site" aria-selected="true">Site</button>
+            <button class="tab" role="tab" data-t="survey" aria-selected="false">Survey</button>
             <button class="tab" role="tab" data-t="autodesign" aria-selected="false">Auto Design</button>
             <button class="tab" role="tab" data-t="layout" aria-selected="false">Layout</button>
             <button class="tab" role="tab" data-t="wind" aria-selected="false">Wind &amp; Structure</button>
@@ -789,6 +790,7 @@ html,body{margin:0;height:100%;background:#fff}
   </section>
   <section id="epc_p-wind" hidden aria-label="EPC Wind and Structure"></section>
   <section id="epc_p-analysis" hidden aria-label="EPC 3D frame analysis"></section>
+  <section id="epc_p-survey" hidden aria-label="EPC roof survey and panel count"></section>
   <section id="epc_p-autodesign" hidden aria-label="EPC Auto Design">
     <div id="epcAutoDesign">
       <div class="epca-head">
@@ -1933,13 +1935,24 @@ g('addBlock').onclick=function(){
 };
 function reload(o){S=JSON.parse(JSON.stringify(o));fill(S,EXTRA);if(!S.module.look)S.module.look='black';sel=0;save();bindInputs();renderBlocks();render()}
 g('loadRef').onclick=function(){reload(REF)};
+/* Used by the Survey tab: replace the array blocks. Returns an error text or '' (same fields and limits as the block inputs). */
+window.EPCLayout={setBlocks:function(arr){
+  if(!Array.isArray(arr)||!arr.length||arr.length>30)return 'Layout takes 1 to 30 blocks';
+  var out=[];
+  for(var i=0;i<arr.length;i++){var b=arr[i],r=Math.round(+b.rows),p=Math.round(+b.perRow),l=+b.low;
+    if(!(r>=1&&p>=1&&isFinite(l)&&l>=0))return 'Block '+(i+1)+' has an invalid size';
+    out.push({name:String(b.name||('Block '+(i+1))),rows:r,perRow:p,low:l})}
+  S.blocks=out;sel=0;save();renderBlocks();render();
+  try{document.dispatchEvent(new CustomEvent('epc:linked'))}catch(e){}
+  return '';
+}};
 
 /* ---------- tabs ---------- */
 g('tabs').addEventListener('click',function(e){
   var t=e.target.getAttribute&&e.target.getAttribute('data-t');if(!t)return;
   tab=t;
   root.querySelectorAll('.tab').forEach(function(b){b.setAttribute('aria-selected',b.getAttribute('data-t')===t?'true':'false')});
-  ['site','layout','wind','analysis','draw','elec','bom','docs','autodesign'].forEach(function(k){g('p-'+k).hidden=(k!==t)});
+  ['site','survey','layout','wind','analysis','draw','elec','bom','docs','autodesign'].forEach(function(k){g('p-'+k).hidden=(k!==t)});
 });
 function chips(){
   var h=S.blocks.map(function(b,i){return '<button class="ep-chip" data-sel="'+i+'" aria-pressed="'+(i===sel)+'">'+esc(b.name||('Block '+(i+1)))+'</button>'}).join('');
@@ -2506,6 +2519,7 @@ bindInputs();renderBlocks();render();
 <script src="epc-analysis.js" defer></script>
 <script src="epc-analysis-ui.js" defer></script>
 <script src="epc-bom.js" defer></script>
+<script src="epc-survey.js" defer></script>
 <script src="site-survey-design.js" defer></script>
 <script src="dpr-module.js" defer></script>
 <script src="notification-center.js" defer></script>
