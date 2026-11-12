@@ -139,7 +139,7 @@
           zones.push(hz.map(function(q){return enToST(q,inp.az)}));
         });
         var m2=P.fit(poly2,ob2,{w:wAcross,d:dPlan,gap:gapM,pitch:pitch,setback:inp.sb,clear:inp.cl,shade:zones});
-        var tabs=groupTables(m2,wAcross,gapM),cosT=Math.cos(tilt*RAD);
+        var tabs=groupTables(m2,wAcross,gapM),depth=k*dSlope+(k-1)*gapM,cosT=Math.cos(tilt*RAD);
         tabs.forEach(function(t,ti){
           var tw=t.per*wAcross+(t.per-1)*gapM;
           var corners=[[t.s0,t.t0],[t.s0+tw,t.t0],[t.s0+tw,t.t0+dPlan],[t.s0,t.t0+dPlan]].map(function(z){return enToSheet(stToEN(z,inp.az),inp.top)});
@@ -148,7 +148,9 @@
             var s1=t.s0+cI*(wAcross+gapM),t1=t.t0+r*(dSlope+gapM)*cosT;
             cells.push([[s1,t1],[s1+wAcross,t1],[s1+wAcross,t1+dSlope*cosT],[s1,t1+dSlope*cosT]].map(function(z){return enToSheet(stToEN(z,inp.az),inp.top)}));
           }
-          var tb={name:name+' T'+(ti+1),rows:k,perRow:t.per,modules:k*t.per,corners:corners,cells:cells,part:name};
+          var zF=lvl+inp.lowMm/1000,tanT=Math.tan(tilt*RAD),sinT=Math.sin(tilt*RAD),cellZ=[];
+          for(var r2=0;r2<k;r2++){var zb=zF+(depth-(r2*(dSlope+gapM)))*sinT;for(var c2=0;c2<t.per;c2++)cellZ.push([zb,zb-dSlope*sinT])}   /* [back (high) edge, front (low) edge] */
+          var tb={name:name+' T'+(ti+1),rows:k,perRow:t.per,modules:k*t.per,corners:corners,cells:cells,cellZ:cellZ,zFront:zF,zBack:zF+depth*sinT,part:name,level:lvl};
           out.tables.push(tb);res.tables.push(tb);
         });
         out.modules=k*m2.length;out.bands=Object.keys(m2.reduce(function(a,q){a[q[1].toFixed(4)]=1;return a},{})).length;
@@ -209,7 +211,32 @@
     tabs.forEach(function(x){var h=x.t.hitCells?Object.keys(x.t.hitCells).length:0;x.t.hitCells=null;x.hit=h;out.shaded+=h;out.perTable.push({name:x.t.name,modules:x.t.modules,shaded:h})});
     return out;
   }
-  window.EPCSurvey={planShade:planShade,convexOverlap:convexOverlap,stampText:stampText,calc:calc,layoutBlocks:layoutBlocks,hull:hull,shadowHull:shadowHull,groupTables:groupTables,sheetToEN:sheetToEN,enToSheet:enToSheet,enToST:enToST,stToEN:stToEN,obstaclePoly:obstaclePoly,MAXBLOCKS:MAXBLOCKS};
+  /* ---- isometric model: 3D points (sheet x, y, height z in metres) -> screen; faces sorted far to near ---- */
+  function project(p,theta,el){var t=theta*RAD,e=el*RAD,xr=p[0]*Math.cos(t)+p[1]*Math.sin(t),yr=-p[0]*Math.sin(t)+p[1]*Math.cos(t);return {x:xr,y:-(p[2]*Math.cos(e)+yr*Math.sin(e)),d:yr}}
+  function isoModel(res,inp,ps,theta,el){
+    var faces=[],floors=[],shadows=[],lines=[],tanT=Math.tan(res.tilt*RAD);
+    inp.parts.forEach(function(p){if(p.use===false)return;var lv=p.level||0;floors.push({pts:rectPts(p.x,p.y,p.w,p.d).map(function(q){return [q[0],q[1],lv]}),kind:'floor'})});
+    if(ps&&ps.state==='ok')ps.shadows.forEach(function(z){shadows.push({pts:z.map(function(q){return [q[0],q[1],0]}),kind:'shadow'})});
+    res.obstacles.forEach(function(o){
+      var P=o.poly,n=P.length;if(!(o.h>0))return;
+      for(var i=0;i<n;i++){var a=P[i],b=P[(i+1)%n];faces.push({pts:[[a[0],a[1],0],[b[0],b[1],0],[b[0],b[1],o.h],[a[0],a[1],o.h]],kind:'obsSide',shade:.5+.25*Math.abs(Math.sin(Math.atan2(b[1]-a[1],b[0]-a[0])))})}
+      faces.push({pts:P.map(function(q){return [q[0],q[1],o.h]}),kind:'obsTop',name:o.name,h:o.h});
+    });
+    res.parts.forEach(function(pt){pt.tables.forEach(function(t){
+      var c=t.corners;                       /* corners: back-left, back-right(s+w), front-right, front-left in table frame */
+      [[c[0],t.zBack],[c[1],t.zBack],[c[2],t.zFront],[c[3],t.zFront]].forEach(function(z){lines.push({pts:[[z[0][0],z[0][1],t.level],[z[0][0],z[0][1],z[1]]],kind:'post'})});
+      t.cells.forEach(function(cl,ci){var zz=t.cellZ[ci];faces.push({pts:[[cl[0][0],cl[0][1],zz[0]],[cl[1][0],cl[1][1],zz[0]],[cl[2][0],cl[2][1],zz[1]],[cl[3][0],cl[3][1],zz[1]]],kind:'module',table:t.name})});
+    })});
+    pt_flush(res,faces);
+    function pr(it){it.sp=it.pts.map(function(q){return project(q,theta,el)});var d=0;it.sp.forEach(function(q){d+=q.d});it.depth=d/it.sp.length;return it}
+    [floors,shadows,faces,lines].forEach(function(a){a.forEach(pr)});
+    faces.sort(function(a,b){return b.depth-a.depth||0});
+    return {floors:floors,shadows:shadows,faces:faces,lines:lines};
+  }
+  function pt_flush(res,faces){            /* flush parts: modules lie in the sloped plane (drawn flat at part level + half the rise, count only) */
+    res.parts.forEach(function(pt){if(pt.kind!=='flush')return;pt.cells.forEach(function(c){faces.push({pts:c.map(function(q){return [q[0],q[1],(pt.level||0)]}),kind:'module',table:pt.name})})});
+  }
+  window.EPCSurvey={isoModel:isoModel,project:project,planShade:planShade,convexOverlap:convexOverlap,stampText:stampText,calc:calc,layoutBlocks:layoutBlocks,hull:hull,shadowHull:shadowHull,groupTables:groupTables,sheetToEN:sheetToEN,enToSheet:enToSheet,enToST:enToST,stToEN:stToEN,obstaclePoly:obstaclePoly,MAXBLOCKS:MAXBLOCKS};
 
   /* ================= UI ================= */
   if(typeof document==='undefined'||!document.getElementById)return;
@@ -219,7 +246,7 @@
   function f(x,d){return isFinite(x)?x.toFixed(d):'–'}
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
   function projName(){var e=$('engSite');return e&&e.value.trim()?e.value.trim():'(unnamed)'}
-  var V=blank(),last=null,lastInp=null,lastPs=null,timer=null,pend=false;
+  var V=blank(),last=null,lastInp=null,lastPs=null,timer=null,pend=false,ISOTH0=335,isoTheta=335,ISOEL=45;
   function blank(){return {top:'',topdeg:'',rows:'',low:'',sb:'',cl:'',rg:'0',shade:'',sm:'',sd:'',sf:'9',st:'15',pm:'',pd:'',ph:'',parts:[],obs:[]}}
   function loadAll(){try{return JSON.parse(localStorage.getItem(KEY))||{}}catch(e){return {}}}
   function saveVals(){var a=loadAll();a[projName()]=V;try{localStorage.setItem(KEY,JSON.stringify(a))}catch(e){}}
@@ -280,6 +307,25 @@
     return h+'</svg>';
   }
 
+  function isoSvg(r,inp,ps){
+    var m=isoModel(r,inp,ps,isoTheta,ISOEL),all=[];
+    [m.floors,m.shadows,m.faces,m.lines].forEach(function(a){a.forEach(function(it){it.sp.forEach(function(q){all.push(q)})})});
+    var x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;all.forEach(function(q){x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y)});
+    var W=900,pad=1,sc=(W-40)/Math.max(1,x1-x0+2*pad),H=Math.max(240,(y1-y0+2*pad)*sc+30);
+    function X(q){return (20+(q.x-x0+pad)*sc).toFixed(1)}function Y(q){return (15+(q.y-y0+pad)*sc).toFixed(1)}
+    function poly(it,attr){return '<polygon points="'+it.sp.map(function(q){return X(q)+','+Y(q)}).join(' ')+'" '+attr+'/>'}
+    var h='<svg viewBox="0 0 '+W+' '+H.toFixed(0)+'" class="epsvg" role="img" aria-label="Isometric view of the roof survey" style="width:100%;background:#fff;color:#222">';
+    m.floors.forEach(function(it){h+=poly(it,'fill="#e6eaef" stroke="#667" stroke-width="1.2"')});
+    m.shadows.forEach(function(it){h+=poly(it,'fill="#000" fill-opacity=".3"')});
+    m.lines.forEach(function(it){h+='<line x1="'+X(it.sp[0])+'" y1="'+Y(it.sp[0])+'" x2="'+X(it.sp[1])+'" y2="'+Y(it.sp[1])+'" stroke="#555" stroke-width="1.6"/>'});
+    m.faces.forEach(function(it){
+      if(it.kind==='module')h+=poly(it,'fill="#2f5fd0" stroke="#fff" stroke-width=".7"');
+      else if(it.kind==='obsSide'){var g=Math.round(150*it.shade);h+=poly(it,'fill="rgb('+g+','+(g+8)+','+(g+16)+')" stroke="#222" stroke-width=".8"')}
+      else if(it.kind==='obsTop'){h+=poly(it,'fill="#aab3bd" stroke="#222" stroke-width="1"');var cx=0,cy=0;it.sp.forEach(function(q){cx+=q.x/it.sp.length;cy+=q.y/it.sp.length});h+='<text x="'+X({x:cx})+'" y="'+Y({y:cy})+'" font-size="11" text-anchor="middle" fill="#111">'+esc(it.name)+' '+f(it.h,1)+' m</text>'}
+    });
+    if(ps&&ps.state==='ok')h+='<g transform="translate('+(W-190)+','+(H-58).toFixed(0)+')"><rect width="180" height="46" fill="#fff" stroke="#222"/><text x="8" y="19" font-size="14" font-weight="800">DATE : '+ps.stamp.date+'</text><text x="8" y="38" font-size="14" font-weight="800">TIME : '+ps.stamp.time+'</text></g>';
+    return h+'</svg>';
+  }
   function render(){
     var out=$('epcv_out');if(!out)return;
     var inp=gather(),r=calc(inp);last=r;lastInp=inp;
@@ -305,6 +351,7 @@
       h+='<div style="margin:10px 0">'+svgView(r,inp,false,ps)+'</div><p class="ep-note">Shadows are drawn at roof (datum) level from the obstacle heights you entered; module shading is tested on each module plane (obstacle top minus part level and low-edge height). One instant only, solar time (equation of time ignored). Neighbouring buildings count only if entered as obstacles.'+(ps.flushNote?' Flush parts are not checked for shadow.':'')+'</p>';
       h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_printplan">Print plan with shadows</button></div>';
     }
+    h+='<h3 style="margin:14px 0 4px;font-size:15px">3D view</h3><div class="ep-bar"><button class="btn alt sm" type="button" data-iso="-30" aria-label="Rotate left">⟲ Rotate</button> <button class="btn alt sm" type="button" data-iso="30" aria-label="Rotate right">Rotate ⟳</button> <button class="btn alt sm" type="button" data-iso="0">Reset view</button> <span class="ep-note">View angle '+isoTheta+'°</span></div><div id="epcv_iso" style="margin:8px 0">'+isoSvg(r,inp,lastPs)+'</div><p class="ep-note">Modules sit at their tilt and low-edge height; the thin posts are drawn at the table corners only and are not the analysed structure. Obstacles stand from the datum. Shadows appear when a plan date and time are entered above.</p>';
     var lb=layoutBlocks(r,r.lowMm);
     h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_apply"'+(r.modules?'':' disabled')+'>Use '+f(r.kwp,2)+' kWp as the Site target capacity</button> <button class="btn sm" type="button" id="epcv_send"'+(lb.error?' disabled':'')+'>Send '+(lb.blocks?lb.blocks.length:0)+' table(s) to Layout</button> <button class="btn alt sm" type="button" id="epcv_print">Print / Save as PDF</button> <span class="ep-note" id="epcv_msg">'+(lb.error&&r.tables.length===0?'':(lb.error?esc(lb.error):''))+'</span></div>';
     h+='<p class="ep-note">Preliminary count from hand-measured data. Sending to Layout replaces all current Layout blocks (asked once more before it happens); flush parts are counted only and are not part of the steel structure. Structure, wind and shadow checks still apply and nothing here is approved.</p>';
@@ -396,7 +443,8 @@
     sec.addEventListener('input',onField);sec.addEventListener('change',onField);
     sec.addEventListener('click',function(e){
       var t=e.target;if(!t.getAttribute)return;
-      if(t.id==='epcv_addPart'){V.parts.push({use:true,name:'Part '+String.fromCharCode(65+V.parts.length%26),kind:'table',x:'',y:'',w:'',d:'',level:'0',dir:'',slope:''});renderRows();saveVals();sched()}
+      if(t.getAttribute('data-iso')!==null){var dv=+t.getAttribute('data-iso');isoTheta=dv===0?ISOTH0:((isoTheta+dv)%360+360)%360;render()}
+      else if(t.id==='epcv_addPart'){V.parts.push({use:true,name:'Part '+String.fromCharCode(65+V.parts.length%26),kind:'table',x:'',y:'',w:'',d:'',level:'0',dir:'',slope:''});renderRows();saveVals();sched()}
       else if(t.id==='epcv_addObs'){V.obs.push({name:'Obstacle '+(V.obs.length+1),shape:'rect',x:'',y:'',w:'',d:'',h:''});renderRows();saveVals();sched()}
       else if(t.getAttribute('data-delpart')!==null){V.parts.splice(+t.getAttribute('data-delpart'),1);renderRows();saveVals();sched()}
       else if(t.getAttribute('data-delobs')!==null){V.obs.splice(+t.getAttribute('data-delobs'),1);renderRows();saveVals();sched()}
