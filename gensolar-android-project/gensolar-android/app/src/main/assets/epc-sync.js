@@ -37,7 +37,10 @@
     {k:'cap',m:[N('#engCapacity'),N('#epca_capacity')]},
     {k:'az',m:[N('#engAzimuth'),N('#epca_azimuth')]},
     {k:'inv',m:[N('#engInverter'),N('#epca_inverter',{src:false})]},
-    {k:'mount',m:[MOUNT_SITE,MOUNT_AD]}
+    {k:'mount',m:[MOUNT_SITE,MOUNT_AD]},
+    {k:'sb',m:[N('#epcp_sb'),N('#epcv_sb')]},
+    {k:'cl',m:[N('#epcp_cl'),N('#epcv_cl')]},
+    {k:'rg',m:[N('#epcp_rg'),N('#epcv_rg')]}
   ];
   /* Electrical-tab values that Auto Design needs. One direction only; Auto Design shows them as inputs it uses. */
   var ONEWAY=[['[data-x="elec.voc"]','#epca_voc'],['[data-x="elec.tcVoc"]','#epca_voc_coeff'],['[data-x="elec.tmin"]','#epca_min_temp'],
