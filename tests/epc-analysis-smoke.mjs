@@ -78,6 +78,10 @@ try {
   const p2 = await page.evaluate(() => { const r = window.EPCAnalysis.result(); return r && r.p2 ? { amp: r.p2.amp, err: r.p2.errors.length, n: Object.keys(r.cres2).length } : null; });
   check(p2 && p2.n === 8 && p2.err === 0 && p2.amp >= 1 && p2.amp < 1.5, 'Second-order (P-Δ) results exist for all eight ultimate combinations: ' + JSON.stringify(p2));
   check((await page.locator('#epca2_out').innerText()).includes('Second-order (P-Δ) analysis of the eight ultimate combinations'), 'The Analysis tab reports the P-Δ amplification');
+  check(await page.locator('#epca2_out [data-std]').count() === 3, 'One STAAD download button per block');
+  await page.locator('#epca2_out [data-std]').first().click();
+  const std = await page.evaluate(() => window.__lastStd);
+  check(std && /\.std$/.test(std.name) && /^STAAD SPACE /.test(std.text) && /SET Z UP/.test(std.text) && /PERFORM ANALYSIS\nFINISH\n$/.test(std.text) && (std.text.match(/LOAD COMBINATION/g) || []).length === 13, 'STAAD file is generated for the block: ' + (std && std.name));
   // ---- Fabrication BOM, built from the analysed pieces ----
   check(st === 'pass', 'Analysis passes for every block before the BOM checks');
   check((await page.locator('#epc_tabs [data-t="bom"]').getAttribute('data-locked')) === null, 'BOM unlocks when the analysis passes for every block');

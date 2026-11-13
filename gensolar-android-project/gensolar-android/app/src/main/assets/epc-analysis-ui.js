@@ -229,6 +229,13 @@
     runs.forEach(function(r,i){if(!r)return;pagesFor(r).forEach(function(p){all.push({block:nm(i),title:p[0],body:p[1]})})});
     return all.map(function(p,i){return {block:p.block,title:p.title,html:sheet(p.title,p.body,i+1,all.length,p.block,eng)}});
   }
+  function downloadStd(i){
+    var q=runs[i],bn=result&&result.blocks&&result.blocks[i]?result.blocks[i].name:('Block '+(i+1));if(!q||!window.EPCStaad)return;
+    var txt=window.EPCStaad.build(q,(projName()||'GenSolar')+' '+bn),fn=(String(projName()||'GenSolar')+'-'+bn).replace(/[^A-Za-z0-9_.-]+/g,'-')+'.std';
+    window.__lastStd={name:fn,text:txt};
+    try{if(window.GenSolarNative&&typeof window.GenSolarNative.shareText==='function'){window.GenSolarNative.shareText(txt);return}}catch(e){}
+    try{var bl=new Blob([txt],{type:'text/plain'}),u=URL.createObjectURL(bl),a=document.createElement('a');a.href=u;a.download=fn;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},1500)}catch(e){}
+  }
   function printDrawings(){
     var pg=drawings();if(!pg.length)return;
     $('printSheet').innerHTML=pg.map(function(p){return p.html}).join('');
@@ -254,6 +261,7 @@
       '<div class="meta">Frame sway '+f(x.sway.val,1)+' / '+f(x.sway.lim,1)+' mm '+pill(x.sway.util<=1)+'</div>'+allMembers(x);
     h+='<h4 style="margin:12px 0 4px">Base reactions (envelope of the eight ultimate combinations)</h4>'+reactTable(x);
     h+='<h4 style="margin:12px 0 4px">Engineering drawings</h4><div class="meta">Plan, frame elevation, 3D, moment and axial diagrams, deformed shape, member schedule and base reactions, for every block ('+(r.blocks?r.blocks.length:1)+' block'+((r.blocks&&r.blocks.length>1)?'s':'')+').</div><button type="button" class="btn sm" id="epca2_print">Print / Save drawings as PDF</button>';
+    h+='<h4 style="margin:12px 0 4px">STAAD file</h4><div class="meta">STAAD.Pro command file (.std) of the same model, one per block: metres and kN, Z up, gross section properties, loads and all combinations, first-order. Check the member local axes after opening it in STAAD. Preliminary, not approved.</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+runs.map(function(q,i){return q?'<button type="button" class="btn sm" data-std="'+i+'">Download .std: '+esc(r.blocks[i].name)+'</button>':''}).join('')+'</div>';
     if(x.warn.length)h+='<div class="epca-warnings" style="margin-top:10px">'+x.warn.map(esc).join('<br>')+'</div>';
     h+='<div class="epca-warnings" style="margin-top:10px"><b>Not covered (engineer must verify):</b> P-δ amplification along a member between its nodes (frame P-Δ is included), lateral-torsional buckling, connection and base-plate design, torsion, net-section and block-shear, fatigue, seismic loads, wind on the supporting structure itself and wind from other directions, roof capacity, foundations. Member self-weight of columns, braces and ties is not added (the structure allowance on the Wind tab covers purlins and rafters). Rafter-to-column and purlin-to-rafter joints are modelled rigid. Axial, bending and shear are checked with a linear interaction.</div>';
     out.innerHTML=h;
@@ -273,6 +281,7 @@
     var d=$('epca2_defl');if(d)d.oninput=function(){cfg.defl=+d.value;redraw()};
     var n=$('epca2_names');if(n)n.onchange=function(){cfg.names=n.checked?1:0;redraw()};
     var p=$('epca2_print');if(p)p.onclick=printDrawings;
+    document.querySelectorAll('#epca2_out [data-std]').forEach(function(b){b.onclick=function(){downloadStd(+b.getAttribute('data-std'))}});
     var box=$('epca2_svg');
     if(box&&cfg.view==='3d'){
       var drag=null;
