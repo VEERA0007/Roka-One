@@ -28,7 +28,7 @@ try {
   check((await page.locator('#epc_tabs [data-t="analysis"]').getAttribute('data-locked')) === '1', 'Analysis is locked until Site and Wind inputs exist');
   await page.locator('#engSite').fill('Analysis test'); await page.locator('#engLat').fill('17.385'); await page.locator('#engLon').fill('78.4867');
   await page.locator('#engCapacity').fill('21.26'); await page.locator('#engRoof').fill('2500'); await page.waitForTimeout(500);
-  const W = { h:12,parapet:1,terrain:'2',roofType:'RCC roof',Vb:44,k1:1,k2:1,k3:1,k4:1,Kd:.9,Ka:1,Kc:1,cUpF:1,cUpE:1.5,cDn:.8,modKg:27.5,strKn:.1,llKn:.5,nPur:2,fy:250,lim:180,pType:'RHS',pb:50,ph:100,pt:3,rType:'RHS',rb:50,rh:120,rt:4,nb:4,tcap:40,vcap:30 };
+  const W = { h:12,parapet:1,terrain:'2',roofType:'RCC roof',Vb:44,k1:1,k2:1,k3:1,k4:1,Kd:.9,Ka:1,Kc:1,cUpF:1,cUpE:1.5,cDn:.8,cLong:0.05,modKg:27.5,strKn:.1,llKn:.5,nPur:2,fy:250,lim:180,pType:'RHS',pb:50,ph:100,pt:3,rType:'RHS',rb:50,rh:120,rt:4,nb:4,tcap:40,vcap:30 };
   await page.evaluate(w => { Object.keys(w).forEach(k => { const e = document.getElementById('epcw_' + k); e.value = w[k]; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); });
     const c = document.getElementById('epcw_survey'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); }, W);
   await page.waitForTimeout(800);
@@ -65,7 +65,7 @@ try {
   // Fabricator box-pipe sections (100x100x2 columns and rafters, 60x40x2 purlins, 50x50x2 braces): thin-wall effective width, no slender fail
   await page.evaluate(() => {
     const set = (pre, o) => Object.keys(o).forEach(k => { const e = document.getElementById(pre + k); e.value = o[k]; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); });
-    set('epcw_', { cUpF:.4, cUpE:.55, cDn:.4, rType:'RHS', rb:100, rh:100, rt:2, pType:'RHS', pb:40, ph:60, pt:2 });
+    set('epcw_', { cUpF:.4, cUpE:.55, cDn:.4,cLong:0.05, rType:'RHS', rb:100, rh:100, rt:2, pType:'RHS', pb:40, ph:60, pt:2 });
     set('epca2_', { colType:'RHS', colB:100, colH:100, colT:2, brcType:'RHS', brcB:50, brcH:50, brcT:2 });
   });
   await page.waitForTimeout(1200);
@@ -76,8 +76,8 @@ try {
   if (st === 'pass') check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === null, 'Drawings unlock when the analysis passes');
   else check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === '1', 'Drawings stay locked when the analysis fails');
   const p2 = await page.evaluate(() => { const r = window.EPCAnalysis.result(); return r && r.p2 ? { amp: r.p2.amp, err: r.p2.errors.length, n: Object.keys(r.cres2).length } : null; });
-  check(p2 && p2.n === 4 && p2.err === 0 && p2.amp >= 1 && p2.amp < 1.5, 'Second-order (P-Δ) results exist for all four ultimate combinations: ' + JSON.stringify(p2));
-  check((await page.locator('#epca2_out').innerText()).includes('Second-order (P-Δ) analysis of the four ultimate combinations'), 'The Analysis tab reports the P-Δ amplification');
+  check(p2 && p2.n === 8 && p2.err === 0 && p2.amp >= 1 && p2.amp < 1.5, 'Second-order (P-Δ) results exist for all eight ultimate combinations: ' + JSON.stringify(p2));
+  check((await page.locator('#epca2_out').innerText()).includes('Second-order (P-Δ) analysis of the eight ultimate combinations'), 'The Analysis tab reports the P-Δ amplification');
   // ---- Fabrication BOM, built from the analysed pieces ----
   check(st === 'pass', 'Analysis passes for every block before the BOM checks');
   check((await page.locator('#epc_tabs [data-t="bom"]').getAttribute('data-locked')) === null, 'BOM unlocks when the analysis passes for every block');
