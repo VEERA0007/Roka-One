@@ -75,6 +75,9 @@ try {
   console.log('analysis state:', st);
   if (st === 'pass') check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === null, 'Drawings unlock when the analysis passes');
   else check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === '1', 'Drawings stay locked when the analysis fails');
+  const p2 = await page.evaluate(() => { const r = window.EPCAnalysis.result(); return r && r.p2 ? { amp: r.p2.amp, err: r.p2.errors.length, n: Object.keys(r.cres2).length } : null; });
+  check(p2 && p2.n === 4 && p2.err === 0 && p2.amp >= 1 && p2.amp < 1.5, 'Second-order (P-Δ) results exist for all four ultimate combinations: ' + JSON.stringify(p2));
+  check((await page.locator('#epca2_out').innerText()).includes('Second-order (P-Δ) analysis of the four ultimate combinations'), 'The Analysis tab reports the P-Δ amplification');
   // ---- Fabrication BOM, built from the analysed pieces ----
   check(st === 'pass', 'Analysis passes for every block before the BOM checks');
   check((await page.locator('#epc_tabs [data-t="bom"]').getAttribute('data-locked')) === null, 'BOM unlocks when the analysis passes for every block');
@@ -122,7 +125,7 @@ try {
   const last = csv.csv.split('\n').pop().split(',');
   check(csv.csv.split('\n')[0].startsWith('Block,Sr. No.,Parts Name') && Math.abs(parseFloat(last.pop()) - csv.total) < 0.006, 'CSV carries the project total weight');
   await page.evaluate(() => { window.print = () => { window.__printed2 = 1; }; });
-  await page.locator('#epcb_print').click(); await page.waitForTimeout(500);
+  await page.locator('#epcb_print').click(); await page.waitForFunction(() => !!window.__printed2, null, { timeout: 8000 }).catch(() => {}); await page.waitForTimeout(300);
   check(await page.evaluate(() => !!window.__printed2 && document.querySelectorAll('#printSheet .ep-page').length === 4 && document.querySelectorAll('#printSheet .ep-page table.epcb-t').length === 4), 'Print builds one sheet per table');
   if (process.env.SHOT_DIR) { await page.locator('#epcb_out').screenshot({ path: process.env.SHOT_DIR + '/bom.png' }); }
   // One failing block must fail the whole analysis and keep BOM and Drawings locked, even when the block on screen passes
