@@ -91,7 +91,8 @@
     {id:'Kc',l:'Kc combination factor',min:0.1,step:0.01,hint:'1.00 or 0.90 per code'},
     {id:'cUpF',l:'Net uplift coefficient, field zone',min:0.01,step:0.01,hint:'Positive number, away from the surface'},
     {id:'cUpE',l:'Net uplift coefficient, edge / corner',min:0.01,step:0.01,hint:'Governs member design'},
-    {id:'cDn',l:'Net downward coefficient',min:0.01,step:0.01,hint:'Positive number, toward the surface'}]},
+    {id:'cDn',l:'Net downward coefficient',min:0.01,step:0.01,hint:'Positive number, toward the surface'},
+    {id:'cLong',l:'Along-row (longitudinal) wind coefficient',min:0,step:0.01,zero:1,hint:'Horizontal force along the rows = coefficient × design pressure × slope area, for wind blowing along the rows (IS 875-3 force coefficient). Enter 0 only if your engineer confirms none'}]},
    {t:'Loads (required)',f:[
     {id:'modKg',l:'Module weight (kg)',min:1,step:0.1},
     {id:'strKn',l:'Structure self-weight allowance (kN/m²)',min:0,step:0.01,hint:'Purlins, rafters, clamps',zero:1},
@@ -149,7 +150,7 @@
     if(miss.length){result={state:'missing',missing:miss};return result}
     var beta=L.tilt*RAD,depth=L.port?L.ml:L.mw,area=L.ml*L.mw;
     var w=windPressure(v),pd=w.pd/1000;                       /* kN/m2 */
-    var wu=pd*Math.max(v.cUpF,v.cUpE),wd=pd*v.cDn;
+    var wu=pd*Math.max(v.cUpF,v.cUpE),wd=pd*v.cDn,wx=pd*v.cLong;
     var q={dead:v.modKg*9.81/1000/area+v.strKn,live:v.llKn};
     var s=(depth+L.gap/1000)/v.nPur,Lp=L.fs/1000,Lr=(L.cs/1000)/Math.cos(beta);
     var ls=loadSets(q,beta,wd,wu);
@@ -166,7 +167,7 @@
     }
     chk('Purlin',pur);chk('Rafter',raf);
     if(anc.util>1)fails.push('Anchor bolts utilisation '+f(anc.util,2)+' > 1');
-    result={state:fails.length?'fail':'pass',missing:[],fails:fails,v:v,L:L,beta:beta,depth:depth,area:area,w:w,pd:pd,wu:wu,wd:wd,q:q,s:s,Lp:Lp,Lr:Lr,pur:pur,raf:raf,anc:anc,
+    result={state:fails.length?'fail':'pass',missing:[],fails:fails,v:v,L:L,beta:beta,depth:depth,area:area,w:w,pd:pd,wu:wu,wd:wd,wx:wx,q:q,s:s,Lp:Lp,Lr:Lr,pur:pur,raf:raf,anc:anc,
             text:fails.length?fails.join('; '):'Preliminary checks pass'};
     return result;
   }

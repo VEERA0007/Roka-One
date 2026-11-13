@@ -200,7 +200,7 @@ try {
   check(await page.locator('#epca_layout svg').count() === 1,
     'Ground-mounted mode also generates a panel layout');
   await page.evaluate(() => {
-    const v = {h:12,parapet:1,terrain:'2',roofType:'RCC roof',Vb:44,k1:1,k2:1,k3:1,k4:1,Kd:.9,Ka:1,Kc:1,cUpF:1,cUpE:1.5,cDn:.8,modKg:27.5,strKn:.1,llKn:.5,nPur:2,fy:250,lim:180,pb:50,ph:100,pt:3,rb:50,rh:120,rt:4,nb:4,tcap:40,vcap:30};
+    const v = {h:12,parapet:1,terrain:'2',roofType:'RCC roof',Vb:44,k1:1,k2:1,k3:1,k4:1,Kd:.9,Ka:1,Kc:1,cUpF:1,cUpE:1.5,cDn:.8,cLong:0.1,modKg:27.5,strKn:.1,llKn:.5,nPur:2,fy:250,lim:180,pb:50,ph:100,pt:3,rb:50,rh:120,rt:4,nb:4,tcap:40,vcap:30};
     Object.keys(v).forEach(k => { const e = document.getElementById('epcw_' + k); e.value = v[k]; e.dispatchEvent(new Event('input', { bubbles: true })); });
     const c = document.getElementById('epcw_survey'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));
   });

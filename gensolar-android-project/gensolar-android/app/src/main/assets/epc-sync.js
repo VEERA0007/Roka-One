@@ -156,7 +156,7 @@
     else if(W&&W.state==='fail'){chips.push(['Wind / structure','FAIL']);add('err','Wind and structure checks fail: '+W.fails.join('; ')+'.')}
     else add('warn','Wind and structure inputs are incomplete, so Drawings, Electrical, BOM and Documents stay locked.');
     var AN=window.EPCAnalysis&&window.EPCAnalysis.status();
-    if(AN&&AN.state==='pass'){chips.push(['3D frame analysis','pass (prelim.)']);add('ok','3D frame analysis passes for all four IS 800 combinations in every block (preliminary).')}
+    if(AN&&AN.state==='pass'){chips.push(['3D frame analysis','pass (prelim.)']);add('ok','3D frame analysis passes for all IS 800 combinations in every block (preliminary).')}
     else if(AN&&AN.state==='fail'){chips.push(['3D frame analysis','FAIL']);add('err','3D frame analysis fails: '+AN.fails.slice(0,4).join('; ')+(AN.fails.length>4?' and '+(AN.fails.length-4)+' more':'')+'.')}
     else if(W&&W.state!=='missing')add('warn','The 3D frame analysis inputs are incomplete, so Drawings, Electrical, BOM and Documents stay locked.');
     /* The Layout material list uses its own pipe weights; the fabrication BOM uses the sections that were analysed. Say so when they differ. */

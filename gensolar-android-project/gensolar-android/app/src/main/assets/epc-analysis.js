@@ -76,11 +76,12 @@
     var supports={},bases=[];
     list.forEach(function(p){if(Math.abs(p.z)<1e-9){supports[p.i]=P.fixed?[1,1,1,1,1,1]:[1,1,1,0,0,0];bases.push(p.i)}});
     /* loads (global kN/m on the purlins) */
-    var n=[0,-Math.sin(c.t),Math.cos(c.t)],s=P.s,cases={DL:{udl:{}},LL:{udl:{}},WLd:{udl:{}},WLu:{udl:{}}};
+    var n=[0,-Math.sin(c.t),Math.cos(c.t)],s=P.s,cases={DL:{udl:{}},LL:{udl:{}},WLd:{udl:{}},WLu:{udl:{}},WLx:{udl:{}}};
     mem.forEach(function(m,mi){if(m.kind!=='purlin')return;
       cases.DL.udl[mi]=[0,0,-P.dead*s];cases.LL.udl[mi]=[0,0,-P.live*s];
       cases.WLd.udl[mi]=[-n[0]*P.wd*s,-n[1]*P.wd*s,-n[2]*P.wd*s];
-      cases.WLu.udl[mi]=[n[0]*P.wu*s,n[1]*P.wu*s,n[2]*P.wu*s]});
+      cases.WLu.udl[mi]=[n[0]*P.wu*s,n[1]*P.wu*s,n[2]*P.wu*s];
+      cases.WLx.udl[mi]=[P.wx*s,0,0]});                    /* wind along the rows: horizontal, parallel to the purlins */
     return {model:{nodes:nodes,members:members,supports:supports,cases:cases},mem:mem,bases:bases,xs:xs};
   }
 
@@ -104,8 +105,10 @@
     return chi*th.Ac*fy*1000/GM0;
   }
   var ULS=[{name:'1.5(DL+LL)',f:{DL:1.5,LL:1.5}},{name:'1.5DL+1.5WL(down)',f:{DL:1.5,WLd:1.5}},
-           {name:'1.2(DL+LL+WL down)',f:{DL:1.2,LL:1.2,WLd:1.2}},{name:'0.9DL+1.5WL(uplift)',f:{DL:0.9,WLu:1.5}}];
-  var SLS=[{name:'DL+LL',f:{DL:1,LL:1}},{name:'DL+WL(down)',f:{DL:1,WLd:1}},{name:'DL+WL(uplift)',f:{DL:1,WLu:1}}];
+           {name:'1.2(DL+LL+WL down)',f:{DL:1.2,LL:1.2,WLd:1.2}},{name:'0.9DL+1.5WL(uplift)',f:{DL:0.9,WLu:1.5}},
+           {name:'1.2(DL+LL+WL along +X)',f:{DL:1.2,LL:1.2,WLx:1.2}},{name:'1.2(DL+LL+WL along -X)',f:{DL:1.2,LL:1.2,WLx:-1.2}},
+           {name:'0.9DL+1.5WL(along +X)',f:{DL:0.9,WLx:1.5}},{name:'0.9DL+1.5WL(along -X)',f:{DL:0.9,WLx:-1.5}}];
+  var SLS=[{name:'DL+LL',f:{DL:1,LL:1}},{name:'DL+WL(down)',f:{DL:1,WLd:1}},{name:'DL+WL(uplift)',f:{DL:1,WLu:1}},{name:'DL+WL(along +X)',f:{DL:1,WLx:1}},{name:'DL+WL(along -X)',f:{DL:1,WLx:-1}}];
 
   function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]}
 
@@ -119,7 +122,7 @@
     sec.tie=sec.brc;
     for(var k in sec)if(!sec[k])return {error:'A section is not valid (wall thickness must be less than half the smaller side): '+k};
     var P={pur:sec.pur,raf:sec.raf,col:sec.col,brc:sec.brc,tie:sec.tie,fixed:I.base==='Fixed',tieFrac:I.tieFrac,brcFrac:I.brcFrac,
-           s:W.s,dead:W.q.dead,live:W.q.live,wd:W.wd,wu:W.wu};
+           s:W.s,dead:W.q.dead,live:W.q.live,wd:W.wd,wu:W.wu,wx:W.wx};
     var B=build(c,P),res;
     try{res=F.solve(B.model)}catch(e){return {error:'Model error: '+e.message}}
     if(res.error)return {error:res.error};
@@ -132,7 +135,7 @@
       p.len+=res.mem[mi].L*1000});
     var pieces=porder.map(function(k){return pcs[k]});
     var cres={};ULS.concat(SLS).forEach(function(cb){cres[cb.name]=F.combine(res,cb.f)});
-    /* second order (P-delta) for the four ultimate combinations: a separate solution per combination with the member axial
+    /* second order (P-delta) for the ultimate combinations: a separate solution per combination with the member axial
        forces in the geometric stiffness. Checks below take the larger of first and second order, so this can only add safety. */
     var cres2={},p2={amp:1,iters:0,errors:[],combos:{}};
     ULS.forEach(function(cb){
