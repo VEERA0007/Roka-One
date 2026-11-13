@@ -67,6 +67,19 @@
     for(i=0;i<4;i++)for(j=0;j<4;j++)K[idz[i]][idz[j]]+=b*N[i][j];
     return K;
   }
+  /* Geometric stiffness (P-delta) added to the local matrix for axial force P (tension positive, kN). Consistent cubic form;
+     torsional (Ip/A) term ignored. Beam: both bending planes. Truss: transverse terms P/L only. */
+  function addKg(K,type,P,L){
+    var i,j;
+    if(type==='truss'){var t=P/L;K[1][1]+=t;K[7][7]+=t;K[1][7]-=t;K[7][1]-=t;K[2][2]+=t;K[8][8]+=t;K[2][8]-=t;K[8][2]-=t;return}
+    var c=P/(30*L),M=[[36,3*L,-36,3*L],[3*L,4*L*L,-3*L,-L*L],[-36,-3*L,36,-3*L],[3*L,-L*L,-3*L,4*L*L]];
+    var ixy=[1,5,7,11],ixz=[2,4,8,10];
+    for(i=0;i<4;i++)for(j=0;j<4;j++){
+      K[ixy[i]][ixy[j]]+=c*M[i][j];
+      var sg=((i===1||i===3)!==(j===1||j===3))?-1:1;                /* w-theta_y coupling has the opposite sign (theta_y = -dw/dx) */
+      K[ixz[i]][ixz[j]]+=c*M[i][j]*sg;
+    }
+  }
   function T12(R){                                              /* global -> local transformation, 12x12 block diagonal */
     var T=[];for(var i=0;i<12;i++)T.push(new Float64Array(12));
     for(var b=0;b<4;b++)for(var i2=0;i2<3;i2++)for(var j=0;j<3;j++)T[3*b+i2][3*b+j]=R[i2][j];
@@ -86,10 +99,11 @@
              cases:{name:{nodal:{node:[Fx,Fy,Fz,Mx,My,Mz]}, udl:{member:[wx,wy,wz]} (global), selfweight:true}}}      */
   function solve(model){
     var nn=model.nodes.length,nd=6*nn,i,j,k;
-    var mem=model.members.map(function(m){
+    var mem=model.members.map(function(m,mi){
       var p=model.nodes[m.a],q=model.nodes[m.b],ax=axes(p,q,m.roll||0);
       if(!(ax.L>1e-9))throw new Error('Zero-length member');
       var Kl=localK(m,ax.L),T=T12(ax.R);
+      if(model.kgN&&model.kgN[mi]!==undefined&&model.kgN[mi]!==null)addKg(Kl,m.type,model.kgN[mi],ax.L);
       return {m:m,L:ax.L,R:ax.R,T:T,Kl:Kl};
     });
     /* restraints and free DOF map (nodes are numbered by the caller to keep the bandwidth small) */
@@ -160,6 +174,28 @@
     });
     return res;
   }
+  /* Second-order (P-delta) solution of one load combination. The combined load is solved repeatedly with the member axial
+     forces of the previous pass in the geometric stiffness, until the forces change by less than 0.1 %.
+     Returns {res,cres,iters,N} like solve+combine, or {error,unstable} when the loads reach the elastic buckling load. */
+  function solveSecond(model,factors,o){
+    o=o||{};var names=Object.keys(factors),cm={nodes:model.nodes,members:model.members,supports:model.supports,cases:{C:{nodal:{},udl:{},selfweight:false}}},C=cm.cases.C,selfw=false;
+    names.forEach(function(n){var c=model.cases[n],f=factors[n];if(!c)return;
+      Object.keys(c.nodal||{}).forEach(function(k){var a=C.nodal[k]||(C.nodal[k]=[0,0,0,0,0,0]);c.nodal[k].forEach(function(v,d){a[d]+=f*v})});
+      Object.keys(c.udl||{}).forEach(function(k){var a=C.udl[k]||(C.udl[k]=[0,0,0]);c.udl[k].forEach(function(v,d){a[d]+=f*v})});
+      if(c.selfweight)selfw=true});
+    if(selfw)return {error:'Second-order solution does not support the selfweight flag; add self weight as a member load'};
+    function axial(r){return r.cases.C.end.map(function(e,mi){var L=r.mem[mi].L;return -(e.f[0]+0.5*e.wl[0]*L)})}   /* mean axial force, tension +, kN */
+    var res=null,N,it,max=o.maxIter||15;
+    if(o.first&&o.memL){N=axial({cases:{C:o.first},mem:o.memL})}                   /* start from a first-order result of the same combination */
+    else{res=solve(cm);if(res.error)return {error:res.error};N=axial(res)}
+    for(it=1;it<=max;it++){
+      cm.kgN=N;res=solve(cm);
+      if(res.error)return {error:'Second-order analysis unstable: the loads reach the elastic buckling load of the frame (K + Kg is not positive definite).',unstable:true};
+      var N2=axial(res),dm=0,nm=1;N2.forEach(function(v,i){dm=Math.max(dm,Math.abs(v-N[i]));nm=Math.max(nm,Math.abs(v))});
+      N=N2;if(dm<=1e-3*nm+1e-9)break;
+    }
+    return {res:res,cres:combine(res,{C:1}),iters:it,N:N,converged:it<=max};
+  }
   /* linear combination of load cases: combo = {name:factor} */
   function combine(res,combo){
     var out={disp:[],end:[],reactions:{}},names=Object.keys(combo),first=res.cases[names[0]],i,j;
@@ -191,5 +227,5 @@
     }
     return out;
   }
-  window.EPCFem={solve:solve,combine:combine,stations:stations,rhs:rhs,chs:chs,axes:axes,E:E_STEEL,G:G_STEEL,GAMMA:GAMMA_STEEL};
+  window.EPCFem={solveSecond:solveSecond,addKg:addKg,solve:solve,combine:combine,stations:stations,rhs:rhs,chs:chs,axes:axes,E:E_STEEL,G:G_STEEL,GAMMA:GAMMA_STEEL};
 })();

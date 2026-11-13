@@ -132,6 +132,16 @@
       p.len+=res.mem[mi].L*1000});
     var pieces=porder.map(function(k){return pcs[k]});
     var cres={};ULS.concat(SLS).forEach(function(cb){cres[cb.name]=F.combine(res,cb.f)});
+    /* second order (P-delta) for the four ultimate combinations: a separate solution per combination with the member axial
+       forces in the geometric stiffness. Checks below take the larger of first and second order, so this can only add safety. */
+    var cres2={},p2={amp:1,iters:0,errors:[],combos:{}};
+    ULS.forEach(function(cb){
+      var s2=F.solveSecond(B.model,cb.f,{first:cres[cb.name],memL:res.mem});
+      if(s2.error){p2.errors.push(cb.name+': '+s2.error);return}
+      cres2[cb.name]=s2.cres;p2.iters=Math.max(p2.iters,s2.iters);
+      var u1=0,u2=0;cres[cb.name].disp.forEach(function(d){u1=Math.max(u1,Math.hypot(d[0],d[1],d[2]))});s2.cres.disp.forEach(function(d){u2=Math.max(u2,Math.hypot(d[0],d[1],d[2]))});
+      var a=u1>1e-12?u2/u1:1;p2.combos[cb.name]=a;p2.amp=Math.max(p2.amp,a);
+    });
     /* segments */
     var segs={},order=[];
     mem.forEach(function(m,mi){var id=m.kind+':'+m.seg;if(!segs[id]){segs[id]={id:id,label:m.label,kind:m.kind,els:[],sec:m.sec,type:m.type,cant:m.cant||null};order.push(id)}segs[id].els.push(mi)});
@@ -145,8 +155,10 @@
       sg.Ncd=ncd(s0,th,fy,Math.max(sg.KLr,1),alpha);
       sg.slender=th.slender;
       var maxN=0,minN=0,maxMy=0,maxMz=0,maxV=0,u=0,uc='',anyComp=false;
-      ULS.forEach(function(cb){
-        var cr=cres[cb.name];
+      ULS.forEach(function(cb0){
+       [cres[cb0.name],cres2[cb0.name]].forEach(function(cr,pass){
+        if(!cr)return;
+        var cb={name:cb0.name+(pass?' (P-Δ)':'')};
         sg.els.forEach(function(mi){
           var st=F.stations(res,cr,mi,nst,null);
           st.forEach(function(p){
@@ -159,6 +171,7 @@
             if(ut>u){u=ut;uc=cb.name}
           });
         });
+       });
       });
       sg.maxN=maxN;sg.minN=minN;sg.maxMy=maxMy;sg.maxMz=maxMz;sg.maxV=maxV;sg.util=u;sg.combo=uc;
       sg.shearUtil=sg.type==='beam'?maxV/sg.Vd:0;
@@ -199,13 +212,14 @@
     B.bases.forEach(function(n){
       var row={node:n,p:B.model.nodes[n],combos:{}},T=0,Hs=0,Cm=0,Hx=0,Hy=0,M=0;
       ULS.forEach(function(cb){
-        var r=cres[cb.name].reactions[n];row.combos[cb.name]=r;
-        T=Math.max(T,-r[2]);Cm=Math.max(Cm,r[2]);Hs=Math.max(Hs,Math.hypot(r[0],r[1]));Hx=Math.max(Hx,Math.abs(r[0]));Hy=Math.max(Hy,Math.abs(r[1]));M=Math.max(M,Math.hypot(r[3],r[4]));
+        row.combos[cb.name]=cres[cb.name].reactions[n];
+        [cres[cb.name],cres2[cb.name]].forEach(function(cr){if(!cr)return;var r=cr.reactions[n];
+          T=Math.max(T,-r[2]);Cm=Math.max(Cm,r[2]);Hs=Math.max(Hs,Math.hypot(r[0],r[1]));Hx=Math.max(Hx,Math.abs(r[0]));Hy=Math.max(Hy,Math.abs(r[1]));M=Math.max(M,Math.hypot(r[3],r[4]))});
       });
       row.uplift=T;row.comp=Cm;row.shear=Hs;row.Hx=Hx;row.Hy=Hy;row.moment=M;
       /* anchor interaction on the worst single combination */
-      var u=0;ULS.forEach(function(cb){var r=cres[cb.name].reactions[n],t=Math.max(0,-r[2])/v.nb,s2=Math.hypot(r[0],r[1])/v.nb;
-        u=Math.max(u,Math.pow(t/v.tcap,2)+Math.pow(s2/v.vcap,2))});
+      var u=0;ULS.forEach(function(cb){[cres[cb.name],cres2[cb.name]].forEach(function(cr){if(!cr)return;var r=cr.reactions[n],t=Math.max(0,-r[2])/v.nb,s2=Math.hypot(r[0],r[1])/v.nb;
+        u=Math.max(u,Math.pow(t/v.tcap,2)+Math.pow(s2/v.vcap,2))})});
       row.anchorUtil=u;reacts.push(row);
     });
     /* sway of column tops */
@@ -220,6 +234,7 @@
     var umax=0,uc2=null;ULS.concat(SLS).forEach(function(cb){cres[cb.name].disp.forEach(function(d,i){var t=Math.hypot(d[0],d[1],d[2]);if(t>umax){umax=t;uc2={combo:cb.name,node:i}}})});
     /* verdict */
     var fails=[];
+    p2.errors.forEach(function(e){fails.push('Second-order (P-Δ) analysis, '+e)});
     list.forEach(function(sg){
       var nm=sg.kind+' '+sg.label;
       if(sg.slender)fails.push(nm+': section is slender (not covered)');
@@ -232,7 +247,7 @@
     if(sway.util>1)fails.push('Frame sway '+sway.val.toFixed(1)+' mm > '+sway.lim.toFixed(1)+' mm');
     if(list.some(function(g){return g.reduced}))warn.push('Thin-wall box sections: effective-width properties are used for bending and compression (Winter method, as in EN 1993-1-5; IS 801 uses the same method with slightly different coefficients). Confirm against IS 801 with your engineer.');
     if(I.base==='Fixed')warn.push('Fixed base: base moments are listed but the anchor check uses forces only. Base plate and anchor design for moment is the engineer\'s.');
-    return {ok:true,state:fails.length?'fail':'pass',fails:fails,warn:warn,c:c,P:P,sec:sec,nodes:B.model.nodes,mem:mem,members:B.model.members,res:res,cres:cres,
+    return {ok:true,state:fails.length?'fail':'pass',fails:fails,warn:warn,c:c,P:P,sec:sec,nodes:B.model.nodes,mem:mem,members:B.model.members,res:res,cres:cres,cres2:cres2,p2:p2,
       segs:list,pieces:pieces,elUtil:elUtil,reacts:reacts,sway:sway,umax:umax,umaxAt:uc2,nNodes:B.model.nodes.length,nMembers:mem.length,ULS:ULS,SLS:SLS,I:I,fy:fy};
   }
 
