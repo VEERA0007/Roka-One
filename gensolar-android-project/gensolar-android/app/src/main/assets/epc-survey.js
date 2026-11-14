@@ -368,7 +368,7 @@
     if(!last||last.state!=='ok'||!last.tables.length)return h+'<div class="epca-warnings">Place at least one elevated table first.</div>';
     var lat=lastInp&&lastInp.lat;
     if(!(lat>=-60&&lat<=70))h+='<div class="epca-warnings">Needs the Site latitude (set the location on the Site tab). Still needed: Site latitude.</div>';
-    h+='<div class="ep-bar"><button class="btn sm" type="button" id="epcv_shrun"'+(shdBusy||!(lat>=-60&&lat<=70)?' disabled':'')+'>'+(shd&&shd.state==='ok'?'Re-run':'Run')+' hourly near-shading analysis</button> <span class="ep-note" id="epcv_shprog">'+(shdBusy?'Working… '+Math.round(shdProg*100)+'%':'')+'</span></div>';
+    h+='<div class="ep-bar"><button class="btn sm" type="button" id="epcv_shrun"'+(shdBusy||!(lat>=-60&&lat<=70)?' disabled':'')+'>'+(shd&&shd.state==='ok'?'Re-run':'Run')+' hourly near-shading analysis</button> <button class="btn alt sm" type="button" id="epcv_pkg">Export PDF package</button> <span class="ep-note" id="epcv_shprog">'+(shdBusy?'Working… '+Math.round(shdProg*100)+'%':'')+'</span></div>';
     if(shd&&shd.state==='ok'){
       var stale=shdSig!==curSig();
       if(stale)h+='<div class="epca-warnings">The survey, obstacles or location changed since this run. Run it again before using the numbers.</div>';
@@ -390,6 +390,65 @@
       shdBusy=false;shd=sm;shdSig=sig;render();
     });
   }
+
+  /* ---- PDF export package: sheet, plan, 3D with materials, shadow report, photos ---- */
+  function pkgPage(title,body,foot){
+    var d=new Date().toLocaleDateString('en-IN');
+    return '<div class="ep-page"><div class="ep-ph"><b>'+esc(projName())+'</b><span>'+esc(title)+'</span><span>'+d+'</span></div><div class="ep-pb" style="flex-direction:column;align-items:stretch;justify-content:flex-start">'+body+'</div><div class="ep-pf">'+foot+'</div></div>';
+  }
+  var PKGF='PRELIMINARY – NOT FOR CONSTRUCTION. Hand-measured survey data governs; structure and shading figures are estimates until a structural engineer and the designer sign off.';
+  function pkgMedia(pk,pg){
+    for(var i=0;i<pk.photos.length;i+=4){
+    var cells=pk.photos.slice(i,i+4).map(function(q){return '<figure style="margin:0;display:flex;flex-direction:column;gap:2px;min-height:0"><img src="'+q.src+'" alt="" style="width:100%;height:78mm;object-fit:contain;background:#f3f5f7"><figcaption style="font-size:10px">'+esc(q.name)+(q.note?': '+esc(q.note):'')+'</figcaption></figure>'}).join('');
+    pg.push(pkgPage('Site photos '+(i+1)+'–'+Math.min(i+4,pk.photos.length)+' of '+pk.photos.length,'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+cells+'</div>',PKGF));
+  }
+  if(pk.videos.length)pg.push(pkgPage('Site videos (kept in the app)','<p style="font-size:12px">Videos cannot be printed. They stay saved with this floor in the app:</p><ol style="font-size:12px">'+pk.videos.map(function(v){return '<li>'+esc(v.name)+(v.mb?' ('+f(v.mb,1)+' MB)':'')+(v.note?': '+esc(v.note):'')+'</li>'}).join('')+'</ol>',PKGF));
+  }
+  function buildPackage(){
+    var r=last,inp=lastInp;if(!r||!inp)return {html:'',pages:0};
+    var calc_ok=r.state==='ok';
+    var pk=window.EPCSheetUI&&window.EPCSheetUI.pack?window.EPCSheetUI.pack():{svg:'',photos:[],videos:[]},pg=[];
+    var T='font-size:12px;border-collapse:collapse;margin-top:6px',ok=shd&&shd.state==='ok',stale=ok&&shdSig!==curSig();
+    var lat=inp.lat,lon=nv('engLon'),hasLoc=lat>=-60&&lat<=70;
+    if(!calc_ok){
+      var pk0=pkgPage('Roof survey package: summary','<div class="epca-warnings">The panel count is not available yet, so the plan, 3D view and shading report are left out. Still needed: '+(r.missing||[]).map(esc).join('; ')+'.</div><p style="font-size:12px">Floor: '+esc(pk.floor||'not entered')+'. Photos '+pk.photos.length+', videos '+pk.videos.length+'.</p>',PKGF),pg0=[pk0];
+      if(pk.svg)pg0.push(pkgPage('Floor sheet with traced areas',pk.svg,PKGF));
+      pkgMedia(pk,pg0);return {html:pg0.join(''),pages:pg0.length};
+    }
+    /* 1 summary */
+    var rows=r.parts.map(function(p,i){return '<tr><td>'+esc(p.name)+'</td><td>'+(p.kind==='flush'?'Flush':'Tables')+'</td><td align="right">'+p.modules+'</td><td align="right">'+f(r.partsKwp[i],2)+'</td></tr>'}).join('');
+    var sum='<table style="'+T+'"><tbody><tr><td>Floor</td><td>'+esc(pk.floor||'not entered')+'</td></tr><tr><td>Location</td><td>'+(hasLoc?f(lat,4)+'°N'+(isFinite(lon)?', '+f(lon,4)+'°E':''):'not set')+'</td></tr><tr><td>Array</td><td>'+f(inp.tilt,0)+'° tilt, azimuth '+f(inp.az,0)+'°, '+r.modules+' modules, '+f(r.kwp,2)+' kWp</td></tr><tr><td>Sheet scale</td><td>'+(pk.scaled?f(pk.ppm,2)+' px per metre':'not set')+'</td></tr><tr><td>Annual near-shading loss</td><td>'+(ok?f(shd.totalLossPct,2)+' %'+(stale?' (OUT OF DATE, re-run)':''):'not run')+'</td></tr><tr><td>Photos / videos</td><td>'+pk.photos.length+' / '+pk.videos.length+'</td></tr></tbody></table>'+
+      '<table style="'+T+';width:100%"><thead><tr><th align="left">Part</th><th align="left">Type</th><th align="right">Modules</th><th align="right">kWp</th></tr></thead><tbody>'+rows+'<tr style="font-weight:700"><td>Total</td><td></td><td align="right">'+r.modules+'</td><td align="right">'+f(r.kwp,2)+'</td></tr></tbody></table>'+r.warnings.map(function(w){return '<p style="font-size:11px;margin:4px 0">⚠ '+esc(w)+'</p>'}).join('');
+    pg.push(pkgPage('Roof survey package: summary',sum,PKGF));
+    /* 2 sheet */
+    if(pk.svg)pg.push(pkgPage('Floor sheet with traced areas',pk.svg,PKGF+' Traces are drawn from the Survey rows at the sheet scale.'));
+    /* 3 plan (with shadows if a plan time was entered) */
+    var ps=lastPs&&lastPs.state==='ok'?lastPs:null;
+    pg.push(pkgPage('Plan'+(ps?' with shadows, '+ps.stamp.date+' '+ps.stamp.time:''),svgView(r,inp,true,ps),(ps?'Shadows at '+ps.stamp.date+', '+ps.stamp.time+' solar time ('+ps.shaded+' of '+ps.total+' table modules touched). ':'No plan shadow time entered. ')+(r.shadow?'Obstacle shadows kept clear on day '+r.shadow.day+' of the year, '+f(r.shadow.from,2)+'–'+f(r.shadow.to,2)+' solar h. ':'Obstacle shadows not applied. ')+PKGF));
+    /* 4 3D with members + materials */
+    var sk=showSt;showSt=true;structNow(r,inp);var iso=isoSvg(r,inp,ps),sh=structHtml();showSt=sk;
+    pg.push(pkgPage('3D view with structure members',iso+'<p style="font-size:11px;margin:4px 0">Columns red, rafters green, purlins orange, braces purple, ties dashed.</p>',PKGF));
+    pg.push(pkgPage('Structure material schedule',sh||'<p>Structure sections and layout values were not complete, so no schedule is available.</p>',PKGF));
+    /* 5 shadow report */
+    if(ok){
+      var MN=['J','F','M','A','M','J','J','A','S','O','N','D'];
+      var sb='<p style="margin:4px 0"><b>Annual near-shading loss (beam, clear sky): '+f(shd.totalLossPct,2)+' %</b> over '+shd.modules+' modules, latitude '+f(shd.lat,3)+'°.'+(stale?' <b>THE SURVEY CHANGED AFTER THIS RUN: THESE FIGURES ARE OUT OF DATE.</b>':'')+'</p>'+
+        '<table style="'+T+'"><thead><tr><th align="left">Level (m)</th><th align="right">Modules</th><th align="right">Annual loss %</th></tr></thead><tbody>'+shd.levels.map(function(l){return '<tr><td>'+f(l.level,2)+'</td><td align="right">'+l.modules+'</td><td align="right">'+f(l.lossPct,2)+'</td></tr>'}).join('')+'</tbody></table>'+
+        '<table style="'+T+';width:100%"><thead><tr><th align="left">Table</th><th align="right">Year %</th>'+MN.map(function(m){return '<th align="right">'+m+'</th>'}).join('')+'</tr></thead><tbody>'+shd.tables.map(function(t){return '<tr><td>'+esc(t.name)+'</td><td align="right">'+f(t.lossPct,2)+'</td>'+t.monthLossPct.map(function(x){return '<td align="right">'+f(x,1)+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table>'+
+        '<div style="margin-top:8px">'+heatSvg(shd)+'</div>';
+      pg.push(pkgPage('Hourly near-shading report',sb,'Ray-cast beam shading, average day of each month, clear-sky model; not site weather, diffuse light or bypass-diode behaviour. PVsyst was not run. '+PKGF));
+    }else pg.push(pkgPage('Hourly near-shading report','<div class="epca-warnings">The hourly near-shading analysis has not been run for this survey.</div>',PKGF));
+    pkgMedia(pk,pg);
+    render();
+    return {html:pg.join(''),pages:pg.length};
+  }
+  function printPackage(){
+    var b=buildPackage();if(!b.pages)return;
+    var ps=$('printSheet');ps.innerHTML=b.html;window.__lastPackage={pages:b.pages};
+    var imgs=[].slice.call(ps.querySelectorAll('img')).filter(function(i){return !i.complete}).map(function(i){return new Promise(function(r){i.onload=i.onerror=r})});
+    Promise.race([Promise.all(imgs),new Promise(function(r){setTimeout(r,4000)})]).then(function(){setTimeout(function(){try{var N=window.GenSolarNative;if(N&&typeof N.printPdfLandscape==='function')N.printPdfLandscape();else if(N&&typeof N.printPdf==='function')N.printPdf();else window.print()}catch(e){}},300)});
+  }
+  window.EPCSurveyPackage=function(){return buildPackage()};
   function structInputs(){
     var E=window.EPCAnalysisEngine,miss=[],sec={},lab={},LS=null;
     try{LS=JSON.parse(localStorage.getItem('gs_epc_v1'))}catch(e){}
@@ -548,6 +607,7 @@
       if(t.id==='epcv_sstruct'){showSt=t.checked;render();return}
       if(t.id==='epcv_seethru'){hideMod=t.checked;render();return}
       if(t.id==='epcv_shrun'){runShade();return}
+      if(t.id==='epcv_pkg'){printPackage();return}
       if(t.id==='epcv_shcsv'&&shd&&shd.state==='ok'){saveText('near-shading-hourly.csv',window.EPCShading.csvHourly(shd));return}
       if(t.id==='epcv_shfac'&&shd&&shd.state==='ok'&&last){saveText('near-shading-factor-table.csv',window.EPCShading.csvFactor(window.EPCShading.factorTable(last,lastInp,window.EPCSurvey,{}),lastInp.lat));return}
       if(t.getAttribute('data-iso')!==null){var dv=+t.getAttribute('data-iso');isoTheta=dv===0?ISOTH0:((isoTheta+dv)%360+360)%360;render()}

@@ -101,6 +101,13 @@ try {
   check(csvT && csvT.split('\n')[0].startsWith('month,') && csvT.split('\n').length > 100, 'Hourly CSV is produced: ' + (csvT ? csvT.split('\n').length : 0) + ' lines');
   await page.locator('#epcv_shfac').click(); await page.waitForTimeout(200);
   check((await page.evaluate(() => window.__lastShadeCsv.name)) === 'near-shading-factor-table.csv', 'Factor table CSV is produced');
+  /* PDF package */
+  await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });
+  await page.locator('#epcv_pkg').scrollIntoViewIfNeeded(); await page.locator('#epcv_pkg').click(); await page.waitForTimeout(1200);
+  const pk = await page.evaluate(() => ({ n: document.querySelectorAll('#printSheet .ep-page').length, titles: [...document.querySelectorAll('#printSheet .ep-ph span:nth-child(2)')].map(e => e.textContent), txt: document.getElementById('printSheet').innerText, svgs: document.querySelectorAll('#printSheet svg').length, printed: window.__printed }));
+  check(pk.n >= 5 && pk.printed === 1, 'PDF package builds ' + pk.n + ' pages and opens print: ' + pk.titles.join(' | '));
+  check(pk.txt.includes('Hourly near-shading report') && pk.txt.includes('Annual near-shading loss') && pk.txt.includes('Structure material schedule') && pk.txt.includes('Total steel') && pk.txt.includes('PRELIMINARY'), 'Package carries the shadow report, the material schedule and the preliminary note');
+  check(pk.svgs >= 3 && !pk.txt.includes('OUT OF DATE'), 'Package draws plan, 3D and heat map and the shadow run is current');
   /* send to Layout: two clicks needed */
   await page.selectOption('#epcv_shade', 'off'); await page.waitForTimeout(600);
   const expect = await page.evaluate(() => window.EPCSurvey.state().tables.map(t => [t.rows, t.perRow]));

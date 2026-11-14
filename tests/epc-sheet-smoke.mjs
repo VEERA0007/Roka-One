@@ -81,6 +81,10 @@ try {
   const st = await page.evaluate(() => { const s = window.EPCSheetUI.state(); return { floor: s.M.floor, ppm: s.M.ppm, media: s.media, sheet: s.sheet, rows: window.EPCSurveyUI.rows().parts.length }; });
   check(st.floor === '5th floor terrace' && Math.abs(st.ppm - 20) < 0.3 && st.media === 3 && st.sheet && st.rows === 2, 'Floor, sheet, scale, media and rows come back after a reload: ' + JSON.stringify(st));
   check(await page.locator('#epcs_media_list input[data-note]').first().inputValue() === 'North parapet', 'The photo note was kept');
+  /* PDF package carries the traced sheet, photos and the video list */
+  const pkg = await page.evaluate(() => { const b = window.EPCSurveyPackage ? window.EPCSurveyPackage() : { html: '', pages: 0 }; const d = document.createElement('div'); d.innerHTML = b.html; return { pages: b.pages, titles: [...d.querySelectorAll('.ep-ph span:nth-child(2)')].map(e => e.textContent), imgs: d.querySelectorAll('img').length, sheetImg: d.querySelectorAll('svg image').length, txt: d.textContent }; });
+  check(pkg.titles.includes('Floor sheet with traced areas') && pkg.sheetImg >= 1, 'Package has the traced floor sheet: ' + pkg.titles.join(' | '));
+  check(pkg.imgs === 2 && pkg.titles.some(t => t.startsWith('Site photos 1')) && pkg.txt.includes('Site videos') && pkg.txt.includes('5th floor terrace'), 'Package prints both photos, lists the video and names the floor');
   /* removing a photo */
   await page.locator('#epcs_media_list [data-delm]').first().click(); await page.waitForTimeout(500);
   check((await page.evaluate(() => window.EPCSheetUI.state().media)) === 2, 'A photo can be removed');
