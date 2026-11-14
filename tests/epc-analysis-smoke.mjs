@@ -19,6 +19,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 const failures = []; const check = (c, m) => { if (!c) failures.push(m); else console.log('PASS:', m); };
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await page.addInitScript(() => { try { localStorage.setItem('gs_epc_adv_v1', '1'); } catch (e) {} });
   const errors = []; page.on('pageerror', e => errors.push(e.stack || e.message));
   await page.goto('http://127.0.0.1:4181/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2000);
@@ -146,6 +147,7 @@ try {
   // Column tie default is the drawn 0.6; a 0.75 saved by the old default is replaced once, a 0.75 saved after this revision is kept
   for (const [rev, want] of [[undefined, '0.6'], [2, '0.75']]) {
     const p2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await p2.addInitScript(() => { try { localStorage.setItem('gs_epc_adv_v1', '1'); } catch (e) {} });
     await p2.addInitScript(r => { const o = { colB: '114.3', tieFrac: '0.75' }; if (r) o._rev = r; localStorage.setItem('gs_epc_analysis_v1', JSON.stringify({ '(unnamed)': o, 'Dr Sudhir': o })); }, rev);
     await p2.goto('http://127.0.0.1:4181/', { waitUntil: 'domcontentloaded' }); await p2.waitForTimeout(1800);
     await p2.evaluate(() => { window.exploreGuest(); }); await p2.waitForTimeout(300);

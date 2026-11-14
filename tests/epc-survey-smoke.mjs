@@ -19,6 +19,7 @@ const failures = []; const check = (c, m) => { if (!c) failures.push(m); else co
 const setv = (page, sel, v) => page.evaluate(([s, v]) => { const e = document.querySelector(s); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); }, [sel, v]);
 try {
   const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+  await page.addInitScript(() => { try { localStorage.setItem('gs_epc_adv_v1', '1'); } catch (e) {} });
   const errors = []; page.on('pageerror', e => errors.push(e.stack || e.message));
   await page.goto('http://127.0.0.1:4183/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2000);

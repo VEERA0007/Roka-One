@@ -334,6 +334,6 @@
     ['epc_newProj','epc_loadRef'].forEach(function(id){var b=$(id);if(b)b.addEventListener('click',function(){setTimeout(function(){loadVals();fillBlocks();refresh()},150)})});
     refresh();
   }
-  window.EPCAnalysis={status:function(){return result},result:function(){return run},runs:function(){return runs},drawings:drawings};
+  window.EPCAnalysis={recalc:function(){fillBlocks();compute();render();return result},status:function(){return result},result:function(){return run},runs:function(){return runs},drawings:drawings};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(init,80)});else setTimeout(init,80);
 })();
