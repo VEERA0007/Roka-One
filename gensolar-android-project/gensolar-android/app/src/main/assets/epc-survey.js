@@ -155,7 +155,7 @@
           }
           var zF=lvl+inp.lowMm/1000,tanT=Math.tan(tilt*RAD),sinT=Math.sin(tilt*RAD),cellZ=[];
           for(var r2=0;r2<k;r2++){var zb=zF+(depth-(r2*(dSlope+gapM)))*sinT;for(var c2=0;c2<t.per;c2++)cellZ.push([zb,zb-dSlope*sinT])}   /* [back (high) edge, front (low) edge] */
-          var tb={name:name+' T'+(ti+1),rows:k,perRow:t.per,modules:k*t.per,corners:corners,cells:cells,cellZ:cellZ,zFront:zF,zBack:zF+depth*sinT,part:name,level:lvl};
+          var tb={name:name+' T'+(ti+1),rows:k,perRow:t.per,modules:k*t.per,corners:corners,cells:cells,cellZ:cellZ,zFront:zF,zBack:zF+depth*sinT,part:name,level:lvl,st:{s0:t.s0,t0:t.t0,tw:tw,dPlan:dPlan}};
           out.tables.push(tb);res.tables.push(tb);
         });
         out.modules=k*m2.length;out.bands=Object.keys(m2.reduce(function(a,q){a[q[1].toFixed(4)]=1;return a},{})).length;
@@ -218,7 +218,7 @@
   }
   /* ---- isometric model: 3D points (sheet x, y, height z in metres) -> screen; faces sorted far to near ---- */
   function project(p,theta,el){var t=theta*RAD,e=el*RAD,xr=p[0]*Math.cos(t)+p[1]*Math.sin(t),yr=-p[0]*Math.sin(t)+p[1]*Math.cos(t);return {x:xr,y:-(p[2]*Math.cos(e)+yr*Math.sin(e)),d:yr}}
-  function isoModel(res,inp,ps,theta,el){
+  function isoModel(res,inp,ps,theta,el,stm){
     var faces=[],floors=[],shadows=[],lines=[],tanT=Math.tan(res.tilt*RAD);
     inp.parts.forEach(function(p){if(p.use===false)return;var lv=p.level||0;floors.push({pts:rectPts(p.x,p.y,p.w,p.d).map(function(q){return [q[0],q[1],lv]}),kind:'floor'})});
     if(ps&&ps.state==='ok')ps.shadows.forEach(function(z){shadows.push({pts:z.map(function(q){return [q[0],q[1],0]}),kind:'shadow'})});
@@ -234,13 +234,16 @@
     })});
     pt_flush(res,faces);
     function pr(it){it.sp=it.pts.map(function(q){return project(q,theta,el)});var d=0;it.sp.forEach(function(q){d+=q.d});it.depth=d/it.sp.length;return it}
-    [floors,shadows,faces,lines].forEach(function(a){a.forEach(pr)});
+    var members=[];
+    if(stm&&stm.state==='ok')stm.tables.forEach(function(t){t.members.forEach(function(m){members.push({pts:[m.a,m.b],role:m.role,kind:m.kind})})});
+    [floors,shadows,faces,lines,members].forEach(function(a){a.forEach(pr)});
     faces.sort(function(a,b){return b.depth-a.depth||0});
-    return {floors:floors,shadows:shadows,faces:faces,lines:lines};
+    return {floors:floors,shadows:shadows,faces:faces,lines:lines,members:members};
   }
   function pt_flush(res,faces){            /* flush parts: modules lie in the sloped plane (drawn flat at part level + half the rise, count only) */
     res.parts.forEach(function(pt){if(pt.kind!=='flush')return;pt.cells.forEach(function(c){faces.push({pts:c.map(function(q){return [q[0],q[1],(pt.level||0)]}),kind:'module',table:pt.name})})});
   }
+  window.EPCSurveyStruct=function(){return lastStm};
   window.EPCSurvey={blocksLevel:blocksLevel,isoModel:isoModel,project:project,planShade:planShade,convexOverlap:convexOverlap,stampText:stampText,calc:calc,layoutBlocks:layoutBlocks,hull:hull,shadowHull:shadowHull,groupTables:groupTables,sheetToEN:sheetToEN,enToSheet:enToSheet,enToST:enToST,stToEN:stToEN,obstaclePoly:obstaclePoly,MAXBLOCKS:MAXBLOCKS};
 
   /* ================= UI ================= */
@@ -313,8 +316,8 @@
   }
 
   function isoSvg(r,inp,ps){
-    var m=isoModel(r,inp,ps,isoTheta,ISOEL),all=[];
-    [m.floors,m.shadows,m.faces,m.lines].forEach(function(a){a.forEach(function(it){it.sp.forEach(function(q){all.push(q)})})});
+    var stm=showSt?structNow(r,inp):null,m=isoModel(r,inp,ps,isoTheta,ISOEL,stm),all=[];
+    [m.floors,m.shadows,m.faces,m.lines,m.members].forEach(function(a){a.forEach(function(it){it.sp.forEach(function(q){all.push(q)})})});
     var x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;all.forEach(function(q){x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y)});
     var W=900,pad=1,sc=(W-40)/Math.max(1,x1-x0+2*pad),H=Math.max(240,(y1-y0+2*pad)*sc+30);
     function X(q){return (20+(q.x-x0+pad)*sc).toFixed(1)}function Y(q){return (15+(q.y-y0+pad)*sc).toFixed(1)}
@@ -322,14 +325,48 @@
     var h='<svg viewBox="0 0 '+W+' '+H.toFixed(0)+'" class="epsvg" role="img" aria-label="Isometric view of the roof survey" style="width:100%;background:#fff;color:#222">';
     m.floors.forEach(function(it){h+=poly(it,'fill="#e6eaef" stroke="#667" stroke-width="1.2"')});
     m.shadows.forEach(function(it){h+=poly(it,'fill="#000" fill-opacity=".3"')});
-    m.lines.forEach(function(it){h+='<line x1="'+X(it.sp[0])+'" y1="'+Y(it.sp[0])+'" x2="'+X(it.sp[1])+'" y2="'+Y(it.sp[1])+'" stroke="#555" stroke-width="1.6"/>'});
+    if(!m.members.length)m.lines.forEach(function(it){h+='<line x1="'+X(it.sp[0])+'" y1="'+Y(it.sp[0])+'" x2="'+X(it.sp[1])+'" y2="'+Y(it.sp[1])+'" stroke="#555" stroke-width="1.6"/>'});
     m.faces.forEach(function(it){
-      if(it.kind==='module')h+=poly(it,'fill="#2f5fd0" stroke="#fff" stroke-width=".7"');
+      if(it.kind==='module')h+=poly(it,hideMod?'fill="#2f5fd0" fill-opacity=".12" stroke="#2f5fd0" stroke-opacity=".4" stroke-width=".5"':'fill="#2f5fd0" fill-opacity="'+(m.members.length?'.78':'1')+'" stroke="#fff" stroke-width=".7"');
       else if(it.kind==='obsSide'){var g=Math.round(150*it.shade);h+=poly(it,'fill="rgb('+g+','+(g+8)+','+(g+16)+')" stroke="#222" stroke-width=".8"')}
       else if(it.kind==='obsTop'){h+=poly(it,'fill="#aab3bd" stroke="#222" stroke-width="1"');var cx=0,cy=0;it.sp.forEach(function(q){cx+=q.x/it.sp.length;cy+=q.y/it.sp.length});h+='<text x="'+X({x:cx})+'" y="'+Y({y:cy})+'" font-size="11" text-anchor="middle" fill="#111">'+esc(it.name)+' '+f(it.h,1)+' m</text>'}
     });
+    m.members.forEach(function(it){var c=MCOL[it.role]||'#333',w=MW[it.role]||1.6;h+='<line x1="'+X(it.sp[0])+'" y1="'+Y(it.sp[0])+'" x2="'+X(it.sp[1])+'" y2="'+Y(it.sp[1])+'" stroke="'+c+'" stroke-width="'+w+'" stroke-linecap="round"'+(it.kind==='tie'||it.kind==='brace'?' stroke-dasharray="'+(it.kind==='tie'?'5 3':'1 0')+'"':'')+'/>'});
     if(ps&&ps.state==='ok')h+='<g transform="translate('+(W-190)+','+(H-58).toFixed(0)+')"><rect width="180" height="46" fill="#fff" stroke="#222"/><text x="8" y="19" font-size="14" font-weight="800">DATE : '+ps.stamp.date+'</text><text x="8" y="38" font-size="14" font-weight="800">TIME : '+ps.stamp.time+'</text></g>';
     return h+'</svg>';
+  }
+  var showSt=true,hideMod=false,lastStm=null,MCOL={col:'#b71c1c',raf:'#2e7d32',pur:'#ef6c00',brc:'#6a1b9a'},MW={col:3.2,raf:2.8,pur:2,brc:1.6};
+  function fieldNum(id){var e=$(id);if(!e||e.value==='')return NaN;var x=parseFloat(e.value);return isFinite(x)?x:NaN}
+  function fieldStr(id){var e=$(id);return e?e.value:''}
+  function structInputs(){
+    var E=window.EPCAnalysisEngine,miss=[],sec={},lab={},LS=null;
+    try{LS=JSON.parse(localStorage.getItem('gs_epc_v1'))}catch(e){}
+    if(!E||!window.EPCStruct3D)return {state:'missing',missing:['Structure module not loaded']};
+    function mk(role,type,b,h,t,name){
+      var B=fieldNum(b),H=fieldNum(h),T=fieldNum(t),ty=fieldStr(type);
+      if(!(B>0&&T>0)||(ty==='RHS'&&!(H>0))||(ty!=='RHS'&&ty!=='CHS')){miss.push(name);return}
+      sec[role]=E.section(ty,B,H,T);lab[role]=ty==='RHS'?'RHS '+B+' x '+H+' x '+T:'CHS '+B+' x '+T;
+    }
+    mk('pur','epcw_pType','epcw_pb','epcw_ph','epcw_pt','purlin section (Wind & Structure)');mk('raf','epcw_rType','epcw_rb','epcw_rh','epcw_rt','rafter section (Wind & Structure)');
+    mk('col','epca2_colType','epca2_colB','epca2_colH','epca2_colT','column section (Analysis)');mk('brc','epca2_brcType','epca2_brcB','epca2_brcH','epca2_brcT','brace section (Analysis)');
+    var S0={};['frameSpacing','colSpacingH','colInset','rafterOvh','purlinOvh'].forEach(function(k){S0[k]=LS?parseFloat(LS[k]):NaN;if(!isFinite(S0[k]))miss.push('Layout: '+k)});
+    if(miss.length)return {state:'missing',missing:miss};
+    var tf=fieldNum('epca2_tieFrac'),bf=fieldNum('epca2_brcFrac');
+    return {state:'ok',cfg:{S:S0,sec:sec,labels:lab,fixed:fieldStr('epca2_base')==='Fixed',tieFrac:tf>0?tf:0.6,brcFrac:bf>0?bf:0.75}};
+  }
+  function structNow(r,inp){
+    var si=structInputs();if(si.state!=='ok'){lastStm=si;return null}
+    var o=window.EPCStruct3D.members(r,inp,si.cfg);lastStm=o;return o.state==='ok'?o:null;
+  }
+  function structHtml(){
+    var o=lastStm;
+    if(!o)return '';
+    if(o.state!=='ok')return '<p class="ep-note">Structure members appear here once these are filled: '+o.missing.map(esc).join('; ')+'.</p>';
+    var sc=o.schedule,h='<h3 style="margin:14px 0 4px;font-size:15px">Structure material schedule ('+sc.tables+' table'+(sc.tables>1?'s':'')+')</h3><div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><thead><tr><th align="left">Member</th><th align="left">Section</th><th align="right">Pieces</th><th align="right">Length (m)</th><th align="right">kg/m</th><th align="right">Weight (kg)</th></tr></thead><tbody>';
+    sc.rows.forEach(function(x){h+='<tr style="border-top:1px solid var(--line)"><td><span style="display:inline-block;width:10px;height:10px;background:'+(MCOL[x.role]||'#333')+';margin-right:6px"></span>'+esc(x.name)+'</td><td>'+esc(x.section)+'</td><td align="right">'+x.pieces+'</td><td align="right">'+f(x.lengthM,1)+'</td><td align="right">'+f(x.kgPerM,2)+'</td><td align="right">'+f(x.kg,0)+'</td></tr>'});
+    h+='<tr style="border-top:2px solid var(--line);font-weight:700"><td>Total steel</td><td></td><td></td><td align="right">'+f(sc.totalLengthM,1)+'</td><td></td><td align="right">'+f(sc.totalKg,0)+'</td></tr></tbody></table></div>';
+    h+='<p class="ep-note">Members are the same ones the Analysis tab checks (frames at the frame spacing, columns, ties and braces from Layout and Analysis), placed on every table at its level. Weights are section area x 7850 kg/m3 on net length, before cutting waste, base plates, bolts and fittings. Preliminary: the structure is not approved until a structural engineer signs off.'+(o.warnings.length?' '+esc(o.warnings[0]):'')+'</p>';
+    return h;
   }
   function render(){
     var out=$('epcv_out');if(!out)return;
@@ -356,7 +393,7 @@
       h+='<div style="margin:10px 0">'+svgView(r,inp,false,ps)+'</div><p class="ep-note">Shadows are drawn at roof (datum) level from the obstacle heights you entered; module shading is tested on each module plane (obstacle top minus part level and low-edge height). One instant only, solar time (equation of time ignored). Neighbouring buildings count only if entered as obstacles.'+(ps.flushNote?' Flush parts are not checked for shadow.':'')+'</p>';
       h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_printplan">Print plan with shadows</button></div>';
     }
-    h+='<h3 style="margin:14px 0 4px;font-size:15px">3D view</h3><div class="ep-bar"><button class="btn alt sm" type="button" data-iso="-30" aria-label="Rotate left">⟲ Rotate</button> <button class="btn alt sm" type="button" data-iso="30" aria-label="Rotate right">Rotate ⟳</button> <button class="btn alt sm" type="button" data-iso="0">Reset view</button> <span class="ep-note">View angle '+isoTheta+'°</span></div><div id="epcv_iso" style="margin:8px 0">'+isoSvg(r,inp,lastPs)+'</div><p class="ep-note">Modules sit at their tilt and low-edge height; the thin posts are drawn at the table corners only and are not the analysed structure. Obstacles stand from the datum. Shadows appear when a plan date and time are entered above.</p>';
+    h+='<h3 style="margin:14px 0 4px;font-size:15px">3D view</h3><div class="ep-bar"><button class="btn alt sm" type="button" data-iso="-30" aria-label="Rotate left">⟲ Rotate</button> <button class="btn alt sm" type="button" data-iso="30" aria-label="Rotate right">Rotate ⟳</button> <button class="btn alt sm" type="button" data-iso="0">Reset view</button> <span class="ep-note">View angle '+isoTheta+'°</span> <label class="ep-note" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="epcv_sstruct"'+(showSt?' checked':'')+'> Show structure</label> <label class="ep-note" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="epcv_seethru"'+(hideMod?' checked':'')+'> See through modules</label></div><div id="epcv_iso" style="margin:8px 0">'+isoSvg(r,inp,lastPs)+'</div>'+structHtml()+'<p class="ep-note">Modules sit at their tilt and low-edge height. With Show structure on, the members of the analysed structure are drawn: columns red, rafters green, purlins orange, braces purple and ties dashed purple. Without the structure, the thin posts mark the table corners only. Obstacles stand from the datum. Shadows appear when a plan date and time are entered above.</p>';
     var lb=layoutBlocks(r,r.lowMm);
     h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_apply"'+(r.modules?'':' disabled')+'>Use '+f(r.kwp,2)+' kWp as the Site target capacity</button> <button class="btn sm" type="button" id="epcv_send"'+(lb.error?' disabled':'')+'>Send '+(lb.blocks?lb.blocks.length:0)+' table(s) to Layout</button> <button class="btn alt sm" type="button" id="epcv_print">Print / Save as PDF</button> <span class="ep-note" id="epcv_msg">'+(lb.error&&r.tables.length===0?'':(lb.error?esc(lb.error):''))+'</span></div>';
     h+='<p class="ep-note">Preliminary count from hand-measured data. Sending to Layout replaces all current Layout blocks (asked once more before it happens); flush parts are counted only and are not part of the steel structure. Structure, wind and shadow checks still apply and nothing here is approved.</p>';
@@ -455,6 +492,8 @@
     sec.addEventListener('input',onField);sec.addEventListener('change',onField);
     sec.addEventListener('click',function(e){
       var t=e.target;if(!t.getAttribute)return;
+      if(t.id==='epcv_sstruct'){showSt=t.checked;render();return}
+      if(t.id==='epcv_seethru'){hideMod=t.checked;render();return}
       if(t.getAttribute('data-iso')!==null){var dv=+t.getAttribute('data-iso');isoTheta=dv===0?ISOTH0:((isoTheta+dv)%360+360)%360;render()}
       else if(t.id==='epcv_addPart'){V.parts.push({use:true,name:'Part '+String.fromCharCode(65+V.parts.length%26),kind:'table',x:'',y:'',w:'',d:'',level:'0',dir:'',slope:''});renderRows();saveVals();sched()}
       else if(t.id==='epcv_addObs'){V.obs.push({name:'Obstacle '+(V.obs.length+1),shape:'rect',x:'',y:'',w:'',d:'',h:''});renderRows();saveVals();sched()}
