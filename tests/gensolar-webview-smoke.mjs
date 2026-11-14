@@ -33,6 +33,7 @@ const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); else console.log('PASS:', message); };
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await page.addInitScript(() => { try { localStorage.setItem('gs_epc_adv_v1', '1'); } catch (e) {} });
   const errors = [];
   const consoleErrors = [];
   page.on('pageerror', e => errors.push(e.stack || e.message));
