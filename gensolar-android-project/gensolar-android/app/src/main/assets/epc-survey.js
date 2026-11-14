@@ -338,6 +338,58 @@
   var showSt=true,hideMod=false,lastStm=null,MCOL={col:'#b71c1c',raf:'#2e7d32',pur:'#ef6c00',brc:'#6a1b9a'},MW={col:3.2,raf:2.8,pur:2,brc:1.6};
   function fieldNum(id){var e=$(id);if(!e||e.value==='')return NaN;var x=parseFloat(e.value);return isFinite(x)?x:NaN}
   function fieldStr(id){var e=$(id);return e?e.value:''}
+
+  /* ---- hourly near-shading analysis (ray casting, epc-shading.js) ---- */
+  var shd=null,shdSig='',shdBusy=false,shdProg=0;
+  window.EPCSurveyShade=function(){return shd&&shd.state==='ok'?{result:shd,stale:shdSig!==curSig()}:null};
+  function curSig(){try{return JSON.stringify(lastInp)+'|'+(last&&last.modules)}catch(e){return ''}}
+  function saveText(name,txt){
+    window.__lastShadeCsv={name:name,text:txt};
+    try{if(window.GenSolarNative&&typeof window.GenSolarNative.shareText==='function'){window.GenSolarNative.shareText(txt);return}}catch(e){}
+    try{var bl=new Blob([txt],{type:'text/csv'}),u=URL.createObjectURL(bl),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},1500)}catch(e){}
+  }
+  function heatSvg(sm){
+    var hs=[],h;for(h=5;h<=19;h++)hs.push(h);
+    var cw=40,ch=22,x0=46,y0=22,W=x0+hs.length*cw+10,H=y0+12*ch+34,MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var o='<svg viewBox="0 0 '+W+' '+H+'" class="epsvg" role="img" aria-label="Share of modules shaded by month and solar hour" style="width:100%;max-width:720px;background:#fff;color:#222;font-family:sans-serif">';
+    hs.forEach(function(hh,i){o+='<text x="'+(x0+i*cw+cw/2)+'" y="14" font-size="10" text-anchor="middle">'+hh+'</text>'});
+    sm.grid.forEach(function(row,mi){
+      o+='<text x="40" y="'+(y0+mi*ch+15)+'" font-size="10" text-anchor="end">'+MN[mi]+'</text>';
+      hs.forEach(function(hh,i){var c=row.filter(function(q){return q.h===hh})[0],fr=c?c.frac:null,x=x0+i*cw,y=y0+mi*ch;
+        if(fr===null)o+='<rect x="'+x+'" y="'+y+'" width="'+cw+'" height="'+ch+'" fill="#eceff3" stroke="#fff"/>';
+        else{var g=Math.round(255-fr*200),col='rgb(255,'+g+','+Math.round(g*.75)+')';o+='<rect x="'+x+'" y="'+y+'" width="'+cw+'" height="'+ch+'" fill="'+(fr<1e-9?'#e8f5e9':col)+'" stroke="#fff"><title>'+MN[mi]+' '+hh+' h: '+(fr*100).toFixed(1)+'% of module area shaded</title></rect>';
+          if(fr>=0.005)o+='<text x="'+(x+cw/2)+'" y="'+(y+15)+'" font-size="9" text-anchor="middle" fill="#222">'+Math.round(fr*100)+'</text>'}});
+    });
+    o+='<text x="'+x0+'" y="'+(y0+12*ch+16)+'" font-size="10">Solar hour (x), month (y). Number = % of module area shaded, green = none, grey = sun below 3°.</text></svg>';
+    return o;
+  }
+  function shadeHtml(){
+    var h='<h3 style="margin:14px 0 4px;font-size:15px">Hourly near-shading analysis</h3>';
+    if(!last||last.state!=='ok'||!last.tables.length)return h+'<div class="epca-warnings">Place at least one elevated table first.</div>';
+    var lat=lastInp&&lastInp.lat;
+    if(!(lat>=-60&&lat<=70))h+='<div class="epca-warnings">Needs the Site latitude (set the location on the Site tab). Still needed: Site latitude.</div>';
+    h+='<div class="ep-bar"><button class="btn sm" type="button" id="epcv_shrun"'+(shdBusy||!(lat>=-60&&lat<=70)?' disabled':'')+'>'+(shd&&shd.state==='ok'?'Re-run':'Run')+' hourly near-shading analysis</button> <span class="ep-note" id="epcv_shprog">'+(shdBusy?'Working… '+Math.round(shdProg*100)+'%':'')+'</span></div>';
+    if(shd&&shd.state==='ok'){
+      var stale=shdSig!==curSig();
+      if(stale)h+='<div class="epca-warnings">The survey, obstacles or location changed since this run. Run it again before using the numbers.</div>';
+      h+='<p style="margin:6px 0"><b>Annual near-shading loss (beam, clear sky): '+f(shd.totalLossPct,2)+' %</b> over '+shd.modules+' modules at latitude '+f(shd.lat,3)+'°.</p>';
+      h+='<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><thead><tr><th align="left">Level (m)</th><th align="right">Modules</th><th align="right">Annual loss %</th></tr></thead><tbody>'+shd.levels.map(function(l){return '<tr style="border-top:1px solid var(--line)"><td>'+f(l.level,2)+'</td><td align="right">'+l.modules+'</td><td align="right">'+f(l.lossPct,2)+'</td></tr>'}).join('')+'</tbody></table></div>';
+      var MN=['J','F','M','A','M','J','J','A','S','O','N','D'];
+      h+='<div style="overflow-x:auto;margin-top:8px"><table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr><th align="left">Table</th><th align="right">Annual %</th>'+MN.map(function(m){return '<th align="right">'+m+'</th>'}).join('')+'<th align="right">Worst hour</th></tr></thead><tbody>'+
+        shd.tables.map(function(t){return '<tr style="border-top:1px solid var(--line)"><td>'+esc(t.name)+'</td><td align="right">'+f(t.lossPct,2)+'</td>'+t.monthLossPct.map(function(x){return '<td align="right">'+f(x,1)+'</td>'}).join('')+'<td align="right">'+(t.worst&&t.worst.frac>0?Math.round(t.worst.frac*100)+'% m'+t.worst.month+' '+t.worst.h+'h':'–')+'</td></tr>'}).join('')+'</tbody></table></div>';
+      h+='<div style="margin:8px 0">'+heatSvg(shd)+'</div>';
+      h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_shcsv">Download hourly CSV</button> <button class="btn alt sm" type="button" id="epcv_shfac">Download shading-factor table (for PVsyst)</button></div>';
+      h+='<p class="ep-note">Method: for each month (average day), each solar hour with the sun above 3°, a 4×4 grid of points on every module is tested against the obstacles (with their base heights, so a tank on the penthouse roof shades only what it can reach) and the other modules, along the direction of the sun. Loss is the shaded area share weighted by clear-sky beam on the module. It is not site weather, diffuse light, or bypass-diode behaviour, so it is an estimate of the near-shading loss. PVsyst itself is not run here; the factor table is written for you to check against PVsyst\'s Near shadings table before importing.</p>';
+    }
+    return h;
+  }
+  function runShade(){
+    if(shdBusy||!last||last.state!=='ok'||!window.EPCShading)return;
+    shdBusy=true;shdProg=0;var sig=curSig(),res=last,inp=lastInp;render();
+    window.EPCShading.analyseAsync(res,inp,window.EPCSurvey,window.EPCShadowEngine,{},function(p){shdProg=p;var e=$('epcv_shprog');if(e)e.textContent='Working… '+Math.round(p*100)+'%'}).then(function(sm){
+      shdBusy=false;shd=sm;shdSig=sig;render();
+    });
+  }
   function structInputs(){
     var E=window.EPCAnalysisEngine,miss=[],sec={},lab={},LS=null;
     try{LS=JSON.parse(localStorage.getItem('gs_epc_v1'))}catch(e){}
@@ -394,6 +446,7 @@
       h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_printplan">Print plan with shadows</button></div>';
     }
     h+='<h3 style="margin:14px 0 4px;font-size:15px">3D view</h3><div class="ep-bar"><button class="btn alt sm" type="button" data-iso="-30" aria-label="Rotate left">⟲ Rotate</button> <button class="btn alt sm" type="button" data-iso="30" aria-label="Rotate right">Rotate ⟳</button> <button class="btn alt sm" type="button" data-iso="0">Reset view</button> <span class="ep-note">View angle '+isoTheta+'°</span> <label class="ep-note" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="epcv_sstruct"'+(showSt?' checked':'')+'> Show structure</label> <label class="ep-note" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="epcv_seethru"'+(hideMod?' checked':'')+'> See through modules</label></div><div id="epcv_iso" style="margin:8px 0">'+isoSvg(r,inp,lastPs)+'</div>'+structHtml()+'<p class="ep-note">Modules sit at their tilt and low-edge height. With Show structure on, the members of the analysed structure are drawn: columns red, rafters green, purlins orange, braces purple and ties dashed purple. Without the structure, the thin posts mark the table corners only. Obstacles stand from the datum. Shadows appear when a plan date and time are entered above.</p>';
+    h+=shadeHtml();
     var lb=layoutBlocks(r,r.lowMm);
     h+='<div class="ep-bar"><button class="btn alt sm" type="button" id="epcv_apply"'+(r.modules?'':' disabled')+'>Use '+f(r.kwp,2)+' kWp as the Site target capacity</button> <button class="btn sm" type="button" id="epcv_send"'+(lb.error?' disabled':'')+'>Send '+(lb.blocks?lb.blocks.length:0)+' table(s) to Layout</button> <button class="btn alt sm" type="button" id="epcv_print">Print / Save as PDF</button> <span class="ep-note" id="epcv_msg">'+(lb.error&&r.tables.length===0?'':(lb.error?esc(lb.error):''))+'</span></div>';
     h+='<p class="ep-note">Preliminary count from hand-measured data. Sending to Layout replaces all current Layout blocks (asked once more before it happens); flush parts are counted only and are not part of the steel structure. Structure, wind and shadow checks still apply and nothing here is approved.</p>';
@@ -494,6 +547,9 @@
       var t=e.target;if(!t.getAttribute)return;
       if(t.id==='epcv_sstruct'){showSt=t.checked;render();return}
       if(t.id==='epcv_seethru'){hideMod=t.checked;render();return}
+      if(t.id==='epcv_shrun'){runShade();return}
+      if(t.id==='epcv_shcsv'&&shd&&shd.state==='ok'){saveText('near-shading-hourly.csv',window.EPCShading.csvHourly(shd));return}
+      if(t.id==='epcv_shfac'&&shd&&shd.state==='ok'&&last){saveText('near-shading-factor-table.csv',window.EPCShading.csvFactor(window.EPCShading.factorTable(last,lastInp,window.EPCSurvey,{}),lastInp.lat));return}
       if(t.getAttribute('data-iso')!==null){var dv=+t.getAttribute('data-iso');isoTheta=dv===0?ISOTH0:((isoTheta+dv)%360+360)%360;render()}
       else if(t.id==='epcv_addPart'){V.parts.push({use:true,name:'Part '+String.fromCharCode(65+V.parts.length%26),kind:'table',x:'',y:'',w:'',d:'',level:'0',dir:'',slope:''});renderRows();saveVals();sched()}
       else if(t.id==='epcv_addObs'){V.obs.push({name:'Obstacle '+(V.obs.length+1),shape:'rect',x:'',y:'',w:'',d:'',h:''});renderRows();saveVals();sched()}
