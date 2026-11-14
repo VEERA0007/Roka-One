@@ -284,6 +284,7 @@
     refresh();
   }
   function confirmDiscard(){draft=[];return true}
-  window.EPCMap={addLayer:function(fn){layers.push(fn);schedule()},repaint:function(){schedule()},state:function(){return JSON.parse(JSON.stringify({pin:S.pin,areas:S.areas,obstacles:S.obst,net:netArea()}))},resize:function(){size();schedule()}};
+  function setAreas(areas,pin){S.areas=areas.map(function(p){return p.map(function(q){return [q[0],q[1]]})});if(pin)S.pin={lat:pin.lat,lon:pin.lon};draft=[];if(els&&els.res){pushSite();refresh()}save()}
+  window.EPCMap={setAreas:setAreas,addLayer:function(fn){layers.push(fn);schedule()},repaint:function(){schedule()},state:function(){return JSON.parse(JSON.stringify({pin:S.pin,areas:S.areas,obstacles:S.obst,net:netArea()}))},resize:function(){size();schedule()}};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(init,80)});else setTimeout(init,80);
 })();

@@ -36,7 +36,9 @@ try {
   await fill('epcd_name', 'Guided test'); await fill('epcd_lat', '17.385'); await fill('epcd_lon', '78.4867'); await fill('epcd_kw', '10'); await fill('epcd_wp', '550'); await fill('epcd_ml', '2278'); await fill('epcd_mw', '1134'); await fill('epcd_mkg', '27.5'); await fill('epcd_h', '');
   await page.locator('#epcd_roof').click(); await page.waitForFunction(() => /ESTIMATE/.test(document.getElementById('epcd_msg').textContent), null, { timeout: 8000 });
   const area = await page.evaluate(() => +document.getElementById('epcd_roofSqft').value), hh = await page.evaluate(() => document.getElementById('epcd_h').value);
-  check(Math.abs(area - (240 - 64) * 10.7639) < 6 && hh === '12.8', 'Roof outline from the map fills the usable area (' + area + ' sq ft) and the height (' + hh + ' m)');
+  const mp = await page.evaluate(() => { const m = window.EPCMap.state(); return { n: m.areas.length, net: m.net && m.net.net, roof: +document.getElementById('engRoof').value }; });
+  check(Math.abs(area - 180 * 10.7639) < 12 && hh === '12.8', 'Roof outline from the map fills the usable area, 1 m edge strip removed (' + area + ' sq ft), and the height (' + hh + ' m)');
+  check(mp.n === 1 && Math.abs(mp.roof - area) / area < 0.01, 'The outline is drawn on the Site map as the plant area and Site roof area agrees: ' + JSON.stringify(mp));
   await page.locator('#epcd_go').click();
   await page.waitForFunction(() => /ESTIMATED DESIGN|NO STANDARD/.test(document.getElementById('epcd_out').textContent), null, { timeout: 120000 });
   const out = await page.locator('#epcd_out').innerText();

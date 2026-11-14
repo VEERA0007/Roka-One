@@ -53,13 +53,33 @@
       var d=0;if(!inside){d=1e9;for(var i=0;i<n-1;i++){var p=X[i],q=X[i+1],dx=q[0]-p[0],dy=q[1]-p[1],L=dx*dx+dy*dy,t=L?Math.max(0,Math.min(1,-(p[0]*dx+p[1]*dy)/L)):0;d=Math.min(d,Math.hypot(p[0]+t*dx,p[1]+t*dy))}}
       var tg=w.tags||{},h=parseFloat(tg.height),lv=parseFloat(tg['building:levels']);
       var ht=isFinite(h)?h:(isFinite(lv)?lv*3.2:NaN);
-      if(!best||d<best.dist||(d===best.dist&&a>best.area))best={area:a,perimeter:per,dist:d,inside:inside,height:ht,id:w.id,tags:tg};
+      if(!best||d<best.dist||(d===best.dist&&a>best.area))best={area:a,perimeter:per,dist:d,inside:inside,height:ht,id:w.id,tags:tg,poly:pts.slice(0,-1)};
     });
     return best;
   }
+  /* inward offset of a simple polygon (points [lat,lon], not closed) by d metres, mitred corners. Returns {poly,area (m2)} or null when the
+     shape collapses, crosses itself, or the area does not shrink the way an inward offset must. */
+  function inset(poly,d){
+    var n=poly.length;if(n<3||!(d>0))return null;
+    var lat0=poly[0][0],lon0=poly[0][1],k=Math.PI/180,f=lat0*k,mLat=111132.92-559.82*Math.cos(2*f)+1.175*Math.cos(4*f),mLon=111412.84*Math.cos(f)-93.5*Math.cos(3*f);
+    var X=poly.map(function(p){return [(p[1]-lon0)*mLon,(p[0]-lat0)*mLat]});
+    function area(P){var a=0;for(var i=0;i<P.length;i++){var j=(i+1)%P.length;a+=P[i][0]*P[j][1]-P[j][0]*P[i][1]}return a/2}
+    var A0=area(X),sg=A0>0?1:-1;if(Math.abs(A0)<1)return null;
+    var L=[];                                                            /* offset lines: point + direction, shifted to the inside */
+    for(var i=0;i<n;i++){var p=X[i],q=X[(i+1)%n],dx=q[0]-p[0],dy=q[1]-p[1],l=Math.hypot(dx,dy);if(l<1e-9)return null;dx/=l;dy/=l;
+      var nx=-dy*sg,ny=dx*sg;L.push([p[0]+nx*d,p[1]+ny*d,dx,dy])}
+    var Y=[];
+    for(var i=0;i<n;i++){var a=L[(i+n-1)%n],b=L[i],den=a[2]*b[3]-a[3]*b[2];if(Math.abs(den)<1e-9)return null;
+      var t=((b[0]-a[0])*b[3]-(b[1]-a[1])*b[2])/den;Y.push([a[0]+a[2]*t,a[1]+a[3]*t])}
+    for(var i=0;i<n;i++){var e0=[X[(i+1)%n][0]-X[i][0],X[(i+1)%n][1]-X[i][1]],e1=[Y[(i+1)%n][0]-Y[i][0],Y[(i+1)%n][1]-Y[i][1]];if(e0[0]*e1[0]+e0[1]*e1[1]<=0)return null}   /* an edge flipped: collapsed */
+    function cross(a,b,c,e){function o(p,q,r){return (q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0])}return o(a,b,c)*o(a,b,e)<0&&o(c,e,a)*o(c,e,b)<0}
+    for(var i=0;i<n;i++)for(var j=i+2;j<n;j++){if(i===0&&j===n-1)continue;if(cross(Y[i],Y[(i+1)%n],Y[j],Y[(j+1)%n]))return null}
+    var A1=Math.abs(area(Y));if(!(A1>0&&A1<Math.abs(A0)))return null;
+    return {poly:Y.map(function(p){return [lat0+p[1]/mLat,lon0+p[0]/mLon]}),area:A1};
+  }
   /* usable roof: footprint less a setback strip along the perimeter (A - P d), floored at 0. Returns sq ft. */
   function usableSqft(area,per,setback){var u=Math.max(0,area-per*setback);return u*10.7639104167}
-  window.EPCAuto={CITIES:CITIES,windSpeed:windSpeed,k2:k2,bolt:bolt,LAD:LAD,BOLTS:BOLTS,tiltFor:tiltFor,blocks:blocks,footprint:footprint,usableSqft:usableSqft};
+  window.EPCAuto={CITIES:CITIES,windSpeed:windSpeed,k2:k2,bolt:bolt,LAD:LAD,BOLTS:BOLTS,tiltFor:tiltFor,blocks:blocks,footprint:footprint,inset:inset,usableSqft:usableSqft};
   if(typeof module!=='undefined')module.exports=window.EPCAuto;
 })();
 
@@ -114,9 +134,10 @@
      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
      .then(function(j){var b=A.footprint(j,lat,lon);
        if(!b){say('No building outline found at this pin. Type the usable roof area from your survey.',true);return}
-       var u=A.usableSqft(b.area,b.perimeter,1);
+       var u=A.usableSqft(b.area,b.perimeter,1),ins=A.inset(b.poly,1),drawn=false;
+       if(ins){u=ins.area*10.7639104167;if(window.EPCMap&&window.EPCMap.setAreas){var nm=$('epcd_name').value.trim();if(nm)setv('#engSite',nm);window.EPCMap.setAreas([ins.poly],{lat:lat,lon:lon});drawn=true}}
        $('epcd_roofSqft').value=Math.round(u);if(isFinite(b.height)&&!$('epcd_h').value)$('epcd_h').value=b.height.toFixed(1);save();
-       say('Building outline found ('+Math.round(b.area)+' m² footprint'+(b.inside?'':', '+Math.round(b.dist)+' m from the pin')+'; usable area = footprint less a 1 m edge strip'+(isFinite(b.height)?'; height '+b.height.toFixed(1)+' m from map tags':'')+'). ESTIMATE: confirm on site.')})
+       say('Building outline found ('+Math.round(b.area)+' m² footprint'+(b.inside?'':', '+Math.round(b.dist)+' m from the pin')+'; usable area = footprint less a 1 m edge strip'+(drawn?'; the outline is drawn on the Site map as the plant area':'')+(isFinite(b.height)?'; height '+b.height.toFixed(1)+' m from map tags':'')+'). ESTIMATE: confirm on site.')})
      .catch(function(){say('Could not read the map (offline?). Type the usable roof area from your survey.',true)});
   }
 
