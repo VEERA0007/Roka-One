@@ -68,6 +68,25 @@ try {
   check((await page.locator('#epcv_iso').innerHTML()) !== iso0, 'Rotating changes the 3D view');
   await page.locator('[data-iso="0"]').click(); await page.waitForTimeout(300);
   check((await page.locator('#epcv_iso').innerHTML()) === iso0, 'Reset view returns to the first view');
+  /* structure members in 3D */
+  check((await page.locator('#epcv_out').innerText()).includes('Structure members appear here once these are filled'), 'The structure asks for its sections and layout values first');
+  const sv = (sel, v) => page.evaluate(([sel, v]) => { const e = document.querySelector(sel); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); }, [sel, v]);
+  for (const [k, v] of [['frameSpacing', '2000'], ['colSpacingH', '2000'], ['colInset', '300'], ['rafterOvh', '100'], ['purlinOvh', '100']]) await sv('[data-k="' + k + '"]', v);
+  for (const [k, v] of [['pType', 'RHS'], ['pb', '40'], ['ph', '60'], ['pt', '2'], ['rType', 'RHS'], ['rb', '60'], ['rh', '120'], ['rt', '3']]) await sv('#epcw_' + k, v);
+  for (const [k, v] of [['colType', 'CHS'], ['colB', '88.9'], ['colT', '3.2'], ['brcType', 'CHS'], ['brcB', '60.3'], ['brcT', '3.2']]) await sv('#epca2_' + k, v);
+  await page.waitForTimeout(900);
+  const strokes = await page.evaluate(() => ['#b71c1c', '#2e7d32', '#ef6c00', '#6a1b9a'].map(c => document.querySelectorAll('#epcv_iso line[stroke="' + c + '"]').length));
+  check(strokes.every(n => n > 0), 'Columns, rafters, purlins and braces are drawn in the 3D view: ' + strokes);
+  const stt = await page.locator('#epcv_out').innerText();
+  check(stt.includes('Structure material schedule') && stt.includes('Total steel') && stt.includes('RHS 60 x 120 x 3') && stt.includes('CHS 88.9 x 3.2'), 'Material schedule lists the sections and total steel');
+  const sched = await page.evaluate(() => window.EPCSurveyStruct().schedule);
+  const kgSum = sched.rows.reduce((a, r) => a + r.kg, 0);
+  check(Math.abs(kgSum - sched.totalKg) < 1e-9 && sched.tables === (await page.evaluate(() => window.EPCSurvey.state().tables.length)), 'Schedule covers every table and its rows add up: ' + Math.round(sched.totalKg) + ' kg');
+  const ln0 = await page.locator('#epcv_iso line').count();
+  await page.locator('#epcv_sstruct').uncheck(); await page.waitForTimeout(300);
+  check(await page.locator('#epcv_iso line[stroke="#2e7d32"]').count() === 0, 'Show structure off removes the members');
+  await page.locator('#epcv_sstruct').check(); await page.waitForTimeout(300);
+  check(await page.locator('#epcv_iso line').count() === ln0, 'Show structure on brings them back');
   /* send to Layout: two clicks needed */
   await page.selectOption('#epcv_shade', 'off'); await page.waitForTimeout(600);
   const expect = await page.evaluate(() => window.EPCSurvey.state().tables.map(t => [t.rows, t.perRow]));

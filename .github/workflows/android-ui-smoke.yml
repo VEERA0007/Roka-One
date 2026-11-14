@@ -15,6 +15,7 @@ on:
       - "tests/epc-auto-test.js"
       - "tests/epc-auto-smoke.mjs"
       - "tests/epc-sheet-test.js"
+      - "tests/epc-struct3d-test.js"
       - "tests/epc-sheet-smoke.mjs"
       - "tests/epc-survey-test.js"
       - "tests/epc-survey-smoke.mjs"
@@ -32,6 +33,7 @@ on:
       - "tests/epc-auto-test.js"
       - "tests/epc-auto-smoke.mjs"
       - "tests/epc-sheet-test.js"
+      - "tests/epc-struct3d-test.js"
       - "tests/epc-sheet-smoke.mjs"
       - "tests/epc-survey-test.js"
       - "tests/epc-survey-smoke.mjs"
@@ -68,6 +70,7 @@ jobs:
           node tests/epc-auto-test.js
           node tests/epc-auto-smoke.mjs
           node tests/epc-sheet-test.js
+          node tests/epc-struct3d-test.js
           node tests/epc-sheet-smoke.mjs
           node tests/epc-survey-test.js
           node tests/epc-survey-smoke.mjs
