@@ -37,14 +37,18 @@
   }
   /* Shadow of a vertical prism on a horizontal plane: footprint swept along the shadow vector. Envelope of all sample times
      (convex hull, so slightly larger than the true area: safe side). pts and result are in the compass (e,n) frame. */
-  function shadowHull(pts,hr,samples){
-    var all=pts.slice();
+  /* Shadow zone on a plane. hr = body top above the plane; hb = body bottom above the plane (0 when the body stands on it).
+     A body that floats above the plane (a tank on a higher roof) shades from its bottom shift to its top shift; the footprint itself is not on the plane. */
+  function shadowHull(pts,hr,samples,hb){
+    hb=hb>0?hb:0;var all=hb>0?[]:pts.slice();
     samples.forEach(function(s){
-      var L=hr/Math.tan(s.alt*RAD),de=-L*Math.sin(s.az*RAD),dn=-L*Math.cos(s.az*RAD);
-      pts.forEach(function(p){all.push([p[0]+de,p[1]+dn])});
+      var t=Math.tan(s.alt*RAD);
+      [hb,hr].forEach(function(hh){var L=hh/t,de=-L*Math.sin(s.az*RAD),dn=-L*Math.cos(s.az*RAD);pts.forEach(function(p){all.push([p[0]+de,p[1]+dn])})});
     });
     return hull(all);
   }
+  /* Does an obstacle occupy a part's level? It must stand on or below that level and rise above it (h = 0 is a keep-out area and always counts). */
+  function blocksLevel(o,lvl){var b=o.base>0?o.base:0;return !(o.h>0)||(b<=lvl+1e-6&&o.h>lvl+1e-6)}
   function groupTables(mods,w,gapM){      /* mods = [s,t] cells (one module wide); runs of adjacent cells in one band = one table */
     var by={};mods.forEach(function(m){var k=m[1].toFixed(4);(by[k]=by[k]||[]).push(m)});
     var out=[],step=w+gapM;
@@ -98,6 +102,7 @@
       var nm=o.name||('Obstacle '+(i+1));
       if(!(o.w>0)||(o.shape!=='round'&&!(o.d>0))||!isFinite(o.x)||!isFinite(o.y))miss.push(nm+': position and size');
       if(!chk(o.h,0,200))miss.push(nm+': height above the datum (0 = keep-out area only)');
+      if(o.base!==undefined&&isFinite(o.base)&&o.h>0&&!(o.base>=0&&o.base<o.h))miss.push(nm+': base level must be at least 0 and below its top height');
     });
     if(miss.length)return {state:'missing',missing:miss};
 
@@ -131,11 +136,11 @@
         if(samples&&obs.length)warn.push(name+': obstacle shadows are not evaluated on a sloped part; only the clearance applies.');
       }else{
         var lvl=p.level||0;out.level=lvl;var zPlane=lvl+inp.lowMm/1000,polyEN=rect.map(function(q){return sheetToEN(q,inp.top)});
-        var poly2=polyEN.map(function(q){return enToST(q,inp.az)}),ob2=obsEN.map(function(o){return o.map(function(q){return enToST(q,inp.az)})});
+        var poly2=polyEN.map(function(q){return enToST(q,inp.az)}),ob2=[];obsEN.forEach(function(o,oi){if(blocksLevel(obs[oi],lvl))ob2.push(o.map(function(q){return enToST(q,inp.az)}))});
         var zones=[];
         if(samples&&samples.s.length)obs.forEach(function(o,oi){
           var hr=o.h-zPlane;if(!(hr>0))return;
-          var hz=shadowHull(obsEN[oi],hr,samples.s);out.zones.push(hz.map(function(q){return enToSheet(q,inp.top)}));
+          var hz=shadowHull(obsEN[oi],hr,samples.s,(o.base||0)-zPlane);out.zones.push(hz.map(function(q){return enToSheet(q,inp.top)}));
           zones.push(hz.map(function(q){return enToST(q,inp.az)}));
         });
         var m2=P.fit(poly2,ob2,{w:wAcross,d:dPlan,gap:gapM,pitch:pitch,setback:inp.sb,clear:inp.cl,shade:zones});
@@ -157,7 +162,7 @@
       }
       res.parts.push(out);
     });
-    res.obstacles=obs.map(function(o,i){return {name:o.name||('Obstacle '+(i+1)),poly:obstaclePoly(o),h:o.h,shape:o.shape}});
+    res.obstacles=obs.map(function(o,i){return {name:o.name||('Obstacle '+(i+1)),poly:obstaclePoly(o),h:o.h,base:o.base>0?o.base:0,shape:o.shape}});
     var tm=0,fm=0;res.parts.forEach(function(p){if(p.kind==='flush')fm+=p.modules;else tm+=p.modules});
     res.tableModules=tm;res.flushModules=fm;res.modules=tm+fm;res.kwp=res.modules*inp.mod.wp/1000;
     res.partsKwp=res.parts.map(function(p){return p.modules*inp.mod.wp/1000});
@@ -200,10 +205,10 @@
     if(!out.night){
       res.obstacles.forEach(function(o,oi){
         var en=o.poly.map(function(q){return sheetToEN(q,res.top)});
-        if(o.h>0)out.shadows.push(shadowHull(en,o.h,[sun]).map(function(q){return enToSheet(q,res.top)}));
+        if(o.h>0)out.shadows.push(shadowHull(en,o.h,[sun],o.base).map(function(q){return enToSheet(q,res.top)}));
         tabs.forEach(function(x){
-          var hr=o.h-(x.lvl+res.lowMm/1000);if(!(hr>0))return;
-          var z=shadowHull(en,hr,[sun]).map(function(q){return enToSheet(q,res.top)});
+          var zp=x.lvl+res.lowMm/1000,hr=o.h-zp;if(!(hr>0))return;
+          var z=shadowHull(en,hr,[sun],(o.base||0)-zp).map(function(q){return enToSheet(q,res.top)});
           x.t.cells.forEach(function(c,ci){if(!x.t.hitCells)x.t.hitCells={};if(!x.t.hitCells[ci]&&convexOverlap(c,z))x.t.hitCells[ci]=1});
         });
       });
@@ -218,8 +223,8 @@
     inp.parts.forEach(function(p){if(p.use===false)return;var lv=p.level||0;floors.push({pts:rectPts(p.x,p.y,p.w,p.d).map(function(q){return [q[0],q[1],lv]}),kind:'floor'})});
     if(ps&&ps.state==='ok')ps.shadows.forEach(function(z){shadows.push({pts:z.map(function(q){return [q[0],q[1],0]}),kind:'shadow'})});
     res.obstacles.forEach(function(o){
-      var P=o.poly,n=P.length;if(!(o.h>0))return;
-      for(var i=0;i<n;i++){var a=P[i],b=P[(i+1)%n];faces.push({pts:[[a[0],a[1],0],[b[0],b[1],0],[b[0],b[1],o.h],[a[0],a[1],o.h]],kind:'obsSide',shade:.5+.25*Math.abs(Math.sin(Math.atan2(b[1]-a[1],b[0]-a[0])))})}
+      var P=o.poly,n=P.length,z0=o.base>0?o.base:0;if(!(o.h>0))return;
+      for(var i=0;i<n;i++){var a=P[i],b=P[(i+1)%n];faces.push({pts:[[a[0],a[1],z0],[b[0],b[1],z0],[b[0],b[1],o.h],[a[0],a[1],o.h]],kind:'obsSide',shade:.5+.25*Math.abs(Math.sin(Math.atan2(b[1]-a[1],b[0]-a[0])))})}
       faces.push({pts:P.map(function(q){return [q[0],q[1],o.h]}),kind:'obsTop',name:o.name,h:o.h});
     });
     res.parts.forEach(function(pt){pt.tables.forEach(function(t){
@@ -236,7 +241,7 @@
   function pt_flush(res,faces){            /* flush parts: modules lie in the sloped plane (drawn flat at part level + half the rise, count only) */
     res.parts.forEach(function(pt){if(pt.kind!=='flush')return;pt.cells.forEach(function(c){faces.push({pts:c.map(function(q){return [q[0],q[1],(pt.level||0)]}),kind:'module',table:pt.name})})});
   }
-  window.EPCSurvey={isoModel:isoModel,project:project,planShade:planShade,convexOverlap:convexOverlap,stampText:stampText,calc:calc,layoutBlocks:layoutBlocks,hull:hull,shadowHull:shadowHull,groupTables:groupTables,sheetToEN:sheetToEN,enToSheet:enToSheet,enToST:enToST,stToEN:stToEN,obstaclePoly:obstaclePoly,MAXBLOCKS:MAXBLOCKS};
+  window.EPCSurvey={blocksLevel:blocksLevel,isoModel:isoModel,project:project,planShade:planShade,convexOverlap:convexOverlap,stampText:stampText,calc:calc,layoutBlocks:layoutBlocks,hull:hull,shadowHull:shadowHull,groupTables:groupTables,sheetToEN:sheetToEN,enToSheet:enToSheet,enToST:enToST,stToEN:stToEN,obstaclePoly:obstaclePoly,MAXBLOCKS:MAXBLOCKS};
 
   /* ================= UI ================= */
   if(typeof document==='undefined'||!document.getElementById)return;
@@ -268,7 +273,7 @@
       rows:num(V.rows),lowMm:num(V.low),sb:num(V.sb),cl:num(V.cl),rg:num(V.rg),window:[h1,h2],
       shade:{mode:V.shade,m:num(V.sm),d:num(V.sd),from:num(V.sf),to:num(V.st)},
       parts:V.parts.map(function(p){return {name:p.name,x:num(p.x),y:num(p.y),w:num(p.w),d:num(p.d),kind:p.kind,level:p.level===''||p.level===undefined?0:num(p.level),dir:p.dir,slope:num(p.slope),use:p.use!==false}}),
-      obs:V.obs.map(function(o){return {name:o.name,shape:o.shape,x:num(o.x),y:num(o.y),w:num(o.w),d:o.shape==='round'?num(o.w):num(o.d),h:num(o.h)}})};
+      obs:V.obs.map(function(o){return {name:o.name,shape:o.shape,x:num(o.x),y:num(o.y),w:num(o.w),d:o.shape==='round'?num(o.w):num(o.d),h:num(o.h),base:o.base===''||o.base===undefined?0:num(o.base)}})};
   }
 
   /* ---- top view (sheet orientation, so it can be compared with the paper) ---- */
@@ -400,10 +405,10 @@
       h+='<div class="epcv-row">'+inpH('obs',i,'name','text','Name',o.name)+
         '<select data-obs="'+i+'.shape" aria-label="Shape"><option value="rect"'+(o.shape!=='round'?' selected':'')+'>Box</option><option value="round"'+(o.shape==='round'?' selected':'')+'>Round</option></select>'+
         inpH('obs',i,'x','number','X (m)',o.x)+inpH('obs',i,'y','number','Y (m)',o.y)+inpH('obs',i,'w','number',o.shape==='round'?'Diameter (m)':'Width (m)',o.w)+
-        (o.shape==='round'?'':inpH('obs',i,'d','number','Depth (m)',o.d))+inpH('obs',i,'h','number','Height above datum (m)',o.h)+
+        (o.shape==='round'?'':inpH('obs',i,'d','number','Depth (m)',o.d))+inpH('obs',i,'h','number','Top height above datum (m)',o.h)+inpH('obs',i,'base','number','Base level above datum (m, 0 = on the floor)',o.base)+
         '<button class="btn x" type="button" data-delobs="'+i+'" aria-label="Remove obstacle">×</button></div>';
     });
-    oe.innerHTML=h?'<p class="ep-note">Each row: name · shape · X · Y · width (diameter if round) · depth (m) · top height above datum (m)</p>'+h:'<p class="ep-note">No obstacles. Add tanks, lift rooms, sheds, towers, parapets and neighbouring buildings (height 0 = keep-out area only).</p>';
+    oe.innerHTML=h?'<p class="ep-note">Each row: name · shape · X · Y · width (diameter if round) · depth (m) · top height above datum (m) · base level above datum (m; 0 if it stands on the floor, or the roof level it stands on)</p>'+h:'<p class="ep-note">No obstacles. Add tanks, lift rooms, sheds, towers, parapets and neighbouring buildings (height 0 = keep-out area only).</p>';
   }
   function onField(e){
     var t=e.target;if(!t||!t.getAttribute)return;
@@ -436,6 +441,13 @@
     sec.innerHTML=h;
     return true;
   }
+  /* hooks for the sheet-trace page: add rows the same way the Add buttons do, read the current rows */
+  window.EPCSurveyUI={
+    addPart:function(o){V.parts.push({use:true,name:o.name,kind:o.kind||'table',x:String(o.x),y:String(o.y),w:String(o.w),d:String(o.d),level:String(o.level===undefined?0:o.level),dir:'',slope:''});saveVals();renderRows();sched()},
+    addObs:function(o){V.obs.push({name:o.name,shape:o.shape||'rect',x:String(o.x),y:String(o.y),w:String(o.w),d:String(o.shape==='round'?o.w:o.d),h:String(o.h),base:String(o.base>0?o.base:0)});saveVals();renderRows();sched()},
+    rows:function(){return JSON.parse(JSON.stringify({parts:V.parts,obs:V.obs}))},
+    reload:function(){loadVals();sched()}
+  };
   function init(){
     if(!window.EPCPlaceEngine||!window.EPCShadowEngine||!mount())return;
     var sec=$('epc_p-survey');

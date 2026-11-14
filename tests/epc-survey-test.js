@@ -138,4 +138,32 @@ let sorted=true;for(let i=1;i<mo.faces.length;i++)if(mo.faces[i].depth>mo.faces[
 ok('faces are sorted far to near',sorted);
 ok('module quads are tilted (corner heights differ across the slope)',mo.faces.filter(f=>f.kind==='module').every(f=>f.pts[0][2]>f.pts[2][2]));
 ok('every post goes from the roof to the table edge height',mo.lines.length===4*r.tables.length&&mo.lines.every(l=>l.pts[0][2]===0&&l.pts[1][2]>=1.0-1e-9));
+
+/* 8 multi-level roof: penthouse on the 5th-floor roof, tank on the penthouse roof, lift room above it */
+{
+  const B=()=>Object.assign(base(),{shade:{mode:'off'},sb:0.3,cl:0.3,lowMm:300,rows:1,parts:[{name:'Main',x:0,y:0,w:30,d:20,kind:'table',level:0},{name:'Penthouse roof',x:0,y:0,w:8,d:8,kind:'table',level:3}],
+    obs:[{name:'Penthouse',shape:'rect',x:0,y:0,w:8,d:8,h:3,base:0},{name:'Tank',shape:'round',x:5,y:5,w:2,d:2,h:5,base:3}]});
+  const i=B(),r=S.calc(i);ok('multi-level inputs are accepted',r.state==='ok',JSON.stringify(r.missing));
+  const main=r.parts[0],pent=r.parts[1];
+  const inRect=(c,x0,y0,x1,y1)=>c.every(q=>q[0]>x0-1e-9&&q[0]<x1+1e-9&&q[1]>y0-1e-9&&q[1]<y1+1e-9);
+  const overl=(c,x0,y0,x1,y1)=>c.some(q=>q[0]>x0+1e-6&&q[0]<x1-1e-6&&q[1]>y0+1e-6&&q[1]<y1-1e-6);
+  let bad=0;main.tables.forEach(t=>t.cells.forEach(c=>{if(overl(c,0,0,8,8))bad++}));ok('main roof: no module inside the penthouse footprint (it stands on that level)',bad===0&&main.modules>0,bad);
+  ok('penthouse roof is not blocked by the penthouse that carries it',pent.modules>0,pent.modules);
+  bad=0;pent.tables.forEach(t=>t.cells.forEach(c=>{if(!inRect(c,0,0,8,8)||overl(c,5,5,7,7))bad++}));ok('penthouse roof: modules inside its roof and clear of the tank',bad===0,bad);
+  ok('level semantics: penthouse (top 3) does not block a level-3 roof, blocks level 0',!S.blocksLevel({h:3,base:0},3)&&S.blocksLevel({h:3,base:0},0));
+  ok('tank on the penthouse roof (base 3, top 5) blocks the level-3 roof, not the main roof',S.blocksLevel({h:5,base:3},3)&&!S.blocksLevel({h:5,base:3},0));
+  ok('keep-out area (h = 0) blocks every level',S.blocksLevel({h:0},0)&&S.blocksLevel({h:0},7));
+  /* back-compat: an obstacle without base behaves as before on level 0 */
+  const j=Object.assign(base(),{shade:{mode:'off'},obs:[{name:'Box',shape:'rect',x:4,y:4,w:3,d:3,h:2}]});const rj=S.calc(j);let bb=0;rj.parts[0].tables.forEach(t=>t.cells.forEach(c=>{if(overl(c,4,4,7,7))bb++}));ok('obstacle without a base still keeps modules out',bb===0&&rj.modules>0);
+  /* invalid base */
+  const k=B();k.obs[1].base=5;ok('base not below the top is refused',S.calc(k).state==='missing');
+  /* shadow of a floating body: tank bottom at 3, top 5, plane at 0.3 -> shadow starts at displacement of the base */
+  const sun={alt:45,az:180};const poly=[[0,0],[2,0],[2,2],[0,2]];
+  const z=S.shadowHull(poly,5-0.3,[sun],3-0.3);const ys=z.map(q=>q[1]);
+  ok('floating body: shadow reaches north by (top-plane)/tan(alt) and starts at (base-plane)/tan(alt)',near(Math.max(...ys),2+4.7,1e-9)&&near(Math.min(...ys),2.7,1e-9),Math.min(...ys)+' '+Math.max(...ys));
+  const g=S.shadowHull(poly,2,[sun],0);ok('body on the plane: footprint is part of the zone',near(Math.min(...g.map(q=>q[1])),0,1e-9));
+  /* plan shadows and iso keep working with a base */
+  i.shade={mode:'off'};const ps=S.planShade(r,i,{m:12,d:21,h:11});ok('plan shadow with a floating tank',ps.state==='ok'&&ps.shadows.length===2,ps.state);
+  const iso=S.isoModel(r,i,ps,335,45);const tankTop=iso.faces.find(f=>f.kind==='obsTop'&&f.name==='Tank');ok('3D: tank top at 5 m, side faces start at 3 m',!!tankTop&&tankTop.pts.every(q=>q[2]===5)&&iso.faces.some(f=>f.kind==='obsSide'&&f.pts.some(q=>q[2]===3)));
+}
 console.log(fail?'\n'+fail+' FAILED':'\nall survey checks passed');process.exit(fail?1:0);

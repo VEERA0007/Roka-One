@@ -14,6 +14,8 @@ on:
       - "tests/epc-staad-test.js"
       - "tests/epc-auto-test.js"
       - "tests/epc-auto-smoke.mjs"
+      - "tests/epc-sheet-test.js"
+      - "tests/epc-sheet-smoke.mjs"
       - "tests/epc-survey-test.js"
       - "tests/epc-survey-smoke.mjs"
       - ".github/workflows/android-ui-smoke.yml"
@@ -29,6 +31,8 @@ on:
       - "tests/epc-staad-test.js"
       - "tests/epc-auto-test.js"
       - "tests/epc-auto-smoke.mjs"
+      - "tests/epc-sheet-test.js"
+      - "tests/epc-sheet-smoke.mjs"
       - "tests/epc-survey-test.js"
       - "tests/epc-survey-smoke.mjs"
       - ".github/workflows/android-ui-smoke.yml"
@@ -63,5 +67,7 @@ jobs:
           node tests/epc-staad-test.js
           node tests/epc-auto-test.js
           node tests/epc-auto-smoke.mjs
+          node tests/epc-sheet-test.js
+          node tests/epc-sheet-smoke.mjs
           node tests/epc-survey-test.js
           node tests/epc-survey-smoke.mjs
