@@ -87,6 +87,20 @@ try {
   check(await page.locator('#epcv_iso line[stroke="#2e7d32"]').count() === 0, 'Show structure off removes the members');
   await page.locator('#epcv_sstruct').check(); await page.waitForTimeout(300);
   check(await page.locator('#epcv_iso line').count() === ln0, 'Show structure on brings them back');
+  /* hourly near-shading analysis */
+  const lat0 = await page.evaluate(() => (document.getElementById('engLat') || {}).value);
+  check((await page.locator('#epcv_out').innerText()).includes('Hourly near-shading analysis') && await page.locator('#epcv_shrun').count() === 1, 'Shading section and Run button are offered (latitude ' + lat0 + ')');
+  if (await page.locator('#epcv_shrun').isDisabled()) { await page.evaluate(() => { const e = document.getElementById('engLat'); e.value = '17.4'; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); }); await page.waitForTimeout(500); }
+  await page.locator('#epcv_shrun').scrollIntoViewIfNeeded(); await page.locator('#epcv_shrun').click();
+  await page.waitForFunction(() => window.EPCSurveyShade && window.EPCSurveyShade(), null, { timeout: 30000 });
+  const sh = await page.evaluate(() => { const r = window.EPCSurveyShade(); return { stale: r.stale, loss: r.result.totalLossPct, tabs: r.result.tables.length, mods: r.result.modules }; });
+  check(!sh.stale && sh.loss >= 0 && sh.loss < 40 && sh.tabs === (await page.evaluate(() => window.EPCSurvey.state().tables.length)), 'Shading result covers every table: loss ' + sh.loss.toFixed(2) + ' % for ' + sh.mods + ' modules');
+  check(await page.locator('#epcv_out svg[aria-label^="Share of modules shaded"] rect').count() >= 12 * 15 && await page.locator('#epcv_shcsv').count() === 1 && await page.locator('#epcv_shfac').count() === 1, 'Heat map and the two CSV downloads are shown');
+  await page.locator('#epcv_shcsv').click(); await page.waitForTimeout(200);
+  const csvT = await page.evaluate(() => window.__lastShadeCsv && window.__lastShadeCsv.text);
+  check(csvT && csvT.split('\n')[0].startsWith('month,') && csvT.split('\n').length > 100, 'Hourly CSV is produced: ' + (csvT ? csvT.split('\n').length : 0) + ' lines');
+  await page.locator('#epcv_shfac').click(); await page.waitForTimeout(200);
+  check((await page.evaluate(() => window.__lastShadeCsv.name)) === 'near-shading-factor-table.csv', 'Factor table CSV is produced');
   /* send to Layout: two clicks needed */
   await page.selectOption('#epcv_shade', 'off'); await page.waitForTimeout(600);
   const expect = await page.evaluate(() => window.EPCSurvey.state().tables.map(t => [t.rows, t.perRow]));
