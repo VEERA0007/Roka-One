@@ -33,4 +33,14 @@ ok('footprint area ~ 200 m2 (within 0.5 %)',near(f.area,200,1),f.area);ok('perim
 const out=A.footprint({elements:[j.elements[1]]},lat,lon);ok('pin outside any building: nearest is reported with its distance',out&&!out.inside&&out.dist>40,JSON.stringify(out));
 ok('no buildings -> null',A.footprint({elements:[]},lat,lon)===null);
 ok('usable area = (200 - 60 x 1) m2 = 140 m2 = 1506.9 sq ft',near(A.usableSqft(200,60,1),140*10.7639104167,1e-6));ok('setback bigger than the roof -> 0',A.usableSqft(10,30,1)===0);
+/* inset polygon */
+const R=(x0,y0,x1,y1)=>[[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(p=>[lat+p[1]*ky,lon+p[0]*kx]);
+let q=A.inset(R(-10,-6,10,6),1);ok('rectangle 20x12 inset 1 m -> 18x10 = 180 m2',q&&near(q.area,180,0.5),q&&q.area);
+q=A.inset(R(-10,-6,10,6).reverse(),1);ok('clockwise polygon gives the same inward result',q&&near(q.area,180,0.5),q&&q.area);
+/* L shape (concave): area 20x12 minus 10x6 corner = 180 m2, perimeter 64; inward offset by 1 m = A - P*1 + (convex corners 5 - reflex 1)*... exact: 180-64+ (5-1)*... use known value 118+? computed by rectangle decomposition below */
+const Lp=[[-10,-6],[10,-6],[10,0],[0,0],[0,6],[-10,6]].map(p=>[lat+p[1]*ky,lon+p[0]*kx]);
+q=A.inset(Lp,1);ok('L-shaped roof (concave) inset 1 m: area = 180 - 64 + 4 = 120 m2 (mitred: A - P d + (convex-reflex) d2)',q&&near(q.area,120,0.5),q&&q.area);
+q=A.inset(R(-15,-0.75,15,0.75),1);ok('a strip 1.5 m wide collapses -> null',q===null);
+q=A.inset(R(-10,-6,10,6),0);ok('zero offset -> null',q===null);
+ok('inset polygon stays inside the original (all vertices)',(()=>{const r=A.inset(R(-10,-6,10,6),1);return r.poly.every(p=>{const x=(p[1]-lon)/kx,y=(p[0]-lat)/ky;return x>-10&&x<10&&y>-6&&y<6})})());
 console.log(fail?'FAILED '+fail:'all passed');process.exit(fail?1:0);
