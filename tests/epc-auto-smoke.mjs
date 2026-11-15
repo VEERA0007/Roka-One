@@ -46,12 +46,12 @@ try {
   const v = await page.evaluate(() => ({ tilt: document.getElementById('engTilt').value, vb: document.getElementById('epcw_Vb').value, site: document.getElementById('engSite').value, survey: document.getElementById('epcw_survey').checked, kw: document.getElementById('engCapacity').value, pb: document.getElementById('epcw_pb').value, st: window.EPCWind.status().state }));
   check(v.tilt === '13' && v.vb === '44' && v.site === 'Guided test' && v.kw === '10' && v.st === 'pass', 'Detail tabs are filled consistently: ' + JSON.stringify(v));
   await page.waitForTimeout(800);
-  const lk = await page.locator('#epc_tabs [data-t="analysis"]').getAttribute('data-locked');
-  check(v.survey === false && lk === '1', 'Nothing is confirmed automatically: the survey tick is off and Analysis stays locked (lock=' + lk + ')');
+  const lk = (await page.evaluate(() => !!window.EPCWind.gate('analysis'))) ? '1' : null;
+  check(v.survey === false && lk === '1', 'Nothing is confirmed automatically: the survey tick is off and Analysis is still marked not ready (gate=' + lk + ')');
   await page.locator('#epcd_conf').check(); await page.waitForTimeout(1500);
   const a = await page.evaluate(() => { window.EPCAnalysis.recalc(); const r = window.EPCAnalysis.status(), q = window.EPCAnalysis.result(); return { s: r.state, p2: q && q.cres2 ? Object.keys(q.cres2).length : null }; });
-  check(a.s === 'pass' && a.p2 === 8 && (await page.locator('#epc_tabs [data-t="analysis"]').getAttribute('data-locked')) === null, 'After the engineer confirms, the full analysis (8 combinations, P-Delta) passes and unlocks: ' + JSON.stringify(a));
-  const bom = await page.evaluate(() => (document.querySelector('#epc_tabs [data-t="draw"]').getAttribute('data-locked')));
+  check(a.s === 'pass' && a.p2 === 8 && (await page.evaluate(t => !!window.EPCWind.gate(t), 'analysis')) === false, 'After the engineer confirms, the full analysis (8 combinations, P-Delta) passes and unlocks: ' + JSON.stringify(a));
+  const bom = (await page.evaluate(() => !!window.EPCWind.gate('draw'))) ? '1' : null;
   check(bom === null, 'Drawings unlock after the confirmed analysis');
   await page.locator('#epcd_adv').click(); await page.waitForTimeout(200);
   check(await page.locator('#epc_tabs [data-t="wind"]').isVisible(), 'Review details shows every tab');
