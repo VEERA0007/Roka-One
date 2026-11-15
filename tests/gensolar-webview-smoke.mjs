@@ -121,11 +121,41 @@ try {
   check(await page.locator('#out').isVisible(), 'Estimator produces a visible result after changing the monthly usage input');
   check((await page.locator('#tSize').innerText()).trim().length > 0, 'Estimator calculates and displays a system-size result');
 
+  // Solar Tools tab
+  check(await page.locator('.tabbar button[data-tab="tools"]').count() === 1, 'Solar Tools is added as its own navigation tab');
+  await page.locator('.tabbar button[data-tab="tools"]').click();
+  check(await page.locator('#view-tools').isVisible() && await page.locator('#view-est').isHidden() && await page.locator('#view-dpr').isHidden(), 'Tools opens alone');
+  await page.fill('#st_lat', '17.385'); await page.fill('#st_lon', '78.4867'); await page.locator('#st_lon').dispatchEvent('change'); await page.waitForTimeout(150);
+  const sun = await page.locator('#st_body').innerText();
+  check(/Sunrise\s*\n?\s*\d\d:\d\d/.test(sun) && /Sunset/.test(sun) && await page.locator('#st_body svg path').count() >= 1, 'Sun path shows sunrise, sunset and the day curve for the typed location');
+  await page.locator('[data-st="tab"][data-t="app"]').click();
+  const before = await page.locator('#st_res').innerText();
+  await page.locator('[data-app="0"][data-f="hours"]').fill('10'); await page.waitForTimeout(100);
+  check((await page.locator('#st_res').innerText()) !== before && await page.locator('[data-app="0"][data-f="hours"]').inputValue() === '10', 'Appliance totals update while typing without losing the field');
+  await page.locator('[data-st="toest"]').click(); await page.waitForTimeout(250);
+  const units = await page.evaluate(() => ({ mode: document.getElementById('mode').value, amount: document.getElementById('amount').value, estVisible: !document.getElementById('view-est').hidden }));
+  check(units.mode === 'units' && +units.amount > 50 && units.estVisible, 'Appliance monthly units are sent to the estimator: ' + units.amount);
+  await page.locator('.tabbar button[data-tab="tools"]').click();
+  await page.locator('[data-st="tab"][data-t="sh"]').click();
+  await page.fill('#st_sh_h', '3'); await page.fill('#st_sh_d', '2');
+  check((await page.locator('#st_res').innerText()).includes('Shaded at winter noon'), 'Shadow check flags an obstacle that is too close');
+  await page.locator('[data-st="tab"][data-t="ma"]').click();
+  await page.locator('[data-st="madd"]').click(); await page.waitForTimeout(100);
+  check((await page.locator('#st_body').innerText()).includes('Panel cleaning') && (await page.locator('#st_body').innerText()).includes('1 due') === false, 'Maintenance entry is saved and listed');
+  await page.locator('[data-st="tab"][data-t="ex"]').click();
+  check((await page.locator('#st_res').innerText()).includes('76.9 %'), 'Existing plant check gives the performance ratio');
+  await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForTimeout(500);
+  await page.evaluate(() => { location.hash = ''; }); await page.waitForTimeout(250);
+  await page.evaluate(() => { window.exploreGuest(); }); await page.waitForTimeout(400);
+  await page.locator('.tabbar button[data-tab="tools"]').click();
+  check(await page.evaluate(() => JSON.parse(localStorage.getItem('gensolar_tools_v1')).log.length === 1 && JSON.parse(localStorage.getItem('gensolar_tools_v1')).lat === 17.385), 'Tools data stays on the phone after a reload');
+  await page.locator('.tabbar button[data-tab="dpr"]').click();
+  check(await page.locator('#view-tools').isHidden() && await page.locator('#view-dpr').isVisible(), 'Opening DPR hides Tools');
   // EPC moved to the separate Solar EPC app: nothing of it remains in this app.
   check(await page.locator('#view-engineering').count() === 0 && await page.locator('#tabEng').count() === 0 && await page.locator('#epcRoot').count() === 0, 'EPC page and EPC tab are removed from this app');
   check(await page.evaluate(() => !window.EPCWind && !window.EPCSurvey && !window.EPCAnalysis), 'No EPC engine is loaded');
   const tabs = await page.evaluate(() => [...document.querySelectorAll('.tabbar button')].map(b => b.getAttribute('data-tab')));
-  check(tabs.join(',') === 'est,leads,crm,team,dpr,profile', 'Remaining tabs are unchanged: ' + tabs.join(','));
+  check(tabs.join(',') === 'est,leads,crm,team,dpr,tools,profile', 'Remaining tabs are unchanged: ' + tabs.join(','));
   await page.evaluate(() => { location.hash = '#engineering'; }); await page.waitForTimeout(300);
   check(await page.locator('#view-est').isVisible(), 'The old #engineering link falls back to the estimator');
   check(errors.length === 0, 'No uncaught JavaScript errors: ' + (errors.join(' | ') || 'none'));
