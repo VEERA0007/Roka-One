@@ -270,14 +270,14 @@
     var tabs=$('epc_tabs');if(!tabs)return;
     Array.prototype.forEach.call(tabs.querySelectorAll('.tab'),function(b){
       var t=b.getAttribute('data-t'),g=gateFor(t);
-      if(g){b.setAttribute('data-locked','1');b.setAttribute('aria-disabled','true');b.title='Locked: '+g.title}
-      else{b.removeAttribute('data-locked');b.removeAttribute('aria-disabled');b.removeAttribute('title')}
+      /* tabs are never locked: a step that is not ready shows a notice when opened (see installGate) */
+      b.removeAttribute('data-locked');b.removeAttribute('aria-disabled');if(g)b.title='Not ready: '+g.title;else b.removeAttribute('title')
     });
   }
   function showGate(g){
     var el=$('epc_gate');if(!el)return;
     el.hidden=false;
-    el.innerHTML='<b>'+esc(g.title)+'</b><ul style="margin:6px 0 6px 18px">'+g.items.map(function(m){return '<li>'+esc(m)+'</li>'}).join('')+'</ul><button type="button" class="btn alt sm" id="epc_gateGo">Go to '+(g.step==='site'?'Site':g.step==='analysis'?'Analysis':'Wind &amp; Structure')+'</button>';
+    el.innerHTML='<b>Not ready yet: '+esc(g.title)+'</b> (you can still look around; results here are not valid until this is done)<ul style="margin:6px 0 6px 18px">'+g.items.map(function(m){return '<li>'+esc(m)+'</li>'}).join('')+'</ul><button type="button" class="btn alt sm" id="epc_gateGo">Go to '+(g.step==='site'?'Site':g.step==='analysis'?'Analysis':'Wind &amp; Structure')+'</button>';
     $('epc_gateGo').onclick=function(){el.hidden=true;var b=q('#epc_tabs .tab[data-t="'+g.step+'"]');if(b)b.click()};
   }
   function installGate(){
@@ -287,7 +287,7 @@
     tabs.addEventListener('click',function(e){
       var b=e.target.closest&&e.target.closest('.tab');if(!b)return;
       var t=b.getAttribute('data-t'),g=gateFor(t);
-      if(g){e.stopImmediatePropagation();e.preventDefault();showGate(g)}else d.hidden=true;
+      if(g)showGate(g);else d.hidden=true;                                                /* notice only: the tab still opens */
     },true);
     var st=document.createElement('style');
     st.textContent='#epc_tabs .tab[data-locked]{opacity:.5}#epc_tabs .tab[data-locked]::after{content:" \\1F512";font-size:.8em}#epcw .epcw-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0}#epcw label{display:flex;flex-direction:column;font-size:12px;gap:2px}#epcw label small{opacity:.7}#epcw input,#epcw select{padding:7px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}#epcw .epcw-t{table-layout:fixed}#epcw .epcw-t td:first-child{width:60%;overflow-wrap:anywhere}#epcw .epcw-t td:last-child{width:40%;text-align:right}#epcw .epcw-m td,#epcw .epcw-m th,#epcw .epcw-t td,#epcw .epcw-t th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left}#epcw details{border:1px solid var(--line);border-radius:12px;margin:8px 0;padding:6px 10px}#epcw summary{cursor:pointer;font-weight:600;padding:4px 0}';

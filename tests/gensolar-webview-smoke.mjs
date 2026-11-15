@@ -142,20 +142,22 @@ try {
     'Wind & Structure tab and Site map are present in Engineering');
   check(await page.locator('#epcp').count() === 1, 'Panel placement for drawn map areas is present under the Site map');
   for (const tab of gatedTabs) {
-    check((await page.locator('#epc_tabs [data-t="' + tab + '"]').getAttribute('data-locked')) === '1',
-      'Step is locked until required inputs are entered: ' + tab);
+    check((await page.evaluate(t => !!window.EPCWind.gate(t), tab)) === true,
+      'Step is marked not ready until required inputs are entered: ' + tab);
   }
-  await page.locator('#epc_tabs [data-t="autodesign"]').click({ force: true });
-  check(await page.locator('#epc_gate').isVisible() && !(await page.locator('#epc_p-autodesign').isVisible()),
-    'Clicking a locked step shows the missing inputs and does not open it');
+  check(await page.locator('#epc_tabs [data-locked]').count() === 0, 'No EPC tab is locked');
+  await page.locator('#epc_tabs [data-t="autodesign"]').click();
+  check(await page.locator('#epc_gate').isVisible() && await page.locator('#epc_p-autodesign').isVisible(),
+    'Opening a step that is not ready still works and shows what is missing');
+  await page.locator('#epc_tabs [data-t="site"]').click();
   await page.locator('#engSite').fill('Existing EPC project site');
   await page.locator('#engLat').fill('17.385');
   await page.locator('#engLon').fill('78.4867');
   await page.locator('#engCapacity').fill('21.26');
   await page.locator('#engRoof').fill('2500');
   await page.waitForTimeout(500);
-  check((await page.locator('#epc_tabs [data-t="autodesign"]').getAttribute('data-locked')) === null
-    && (await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === '1',
+  check((await page.evaluate(t => !!window.EPCWind.gate(t), 'autodesign')) === false
+    && (await page.evaluate(t => !!window.EPCWind.gate(t), 'draw')) === true,
     'Site inputs unlock Auto Design, Layout and Wind & Structure but not Drawings');
   await page.locator('#epc_tabs [data-t="autodesign"]').click();
   check(await page.locator('#epc_p-autodesign').isVisible(), 'New Auto Design is added as a separate EPC Engineering tab');
@@ -206,15 +208,15 @@ try {
     const c = document.getElementById('epcw_survey'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await page.waitForTimeout(800);
-  check((await page.locator('#epc_tabs [data-t="analysis"]').getAttribute('data-locked')) === null
-    && (await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === '1',
+  check((await page.evaluate(t => !!window.EPCWind.gate(t), 'analysis')) === false
+    && (await page.evaluate(t => !!window.EPCWind.gate(t), 'draw')) === true,
     'Analysis unlocks after Wind & Structure; Drawings, Electrical, BOM and Documents wait for the analysis');
   await page.evaluate(() => {
     const a = {colType:'CHS',colB:114.3,colT:4.5,brcType:'CHS',brcB:76.1,brcT:3.6,base:'Pinned',K:1,bclass:'b'};
     Object.keys(a).forEach(k => { const e = document.getElementById('epca2_' + k); e.value = a[k]; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); });
   });
   await page.waitForTimeout(1000);
-  check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === null,
+  check((await page.evaluate(t => !!window.EPCWind.gate(t), 'draw')) === false,
     'Drawings, Electrical, BOM and Documents unlock once the 3D frame analysis passes');
   for (const tab of originalTabs) {
     await page.locator('#epc_tabs [data-t="' + tab + '"]').click();

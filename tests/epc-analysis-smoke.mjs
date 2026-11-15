@@ -26,15 +26,15 @@ try {
   await page.evaluate(() => { window.exploreGuest(); }); await page.waitForTimeout(300);
   await page.evaluate(() => { document.querySelectorAll('.page').forEach(el => { el.hidden = true; }); document.getElementById('view-engineering').hidden = false; });
   check(await page.locator('#epc_tabs [data-t="analysis"]').count() === 1 && await page.locator('#epca2').count() === 1, 'Analysis tab is mounted in Engineering');
-  check((await page.locator('#epc_tabs [data-t="analysis"]').getAttribute('data-locked')) === '1', 'Analysis is locked until Site and Wind inputs exist');
+  check((await page.evaluate(t => !!window.EPCWind.gate(t), 'analysis')) === true, 'Analysis is locked until Site and Wind inputs exist');
   await page.locator('#engSite').fill('Analysis test'); await page.locator('#engLat').fill('17.385'); await page.locator('#engLon').fill('78.4867');
   await page.locator('#engCapacity').fill('21.26'); await page.locator('#engRoof').fill('2500'); await page.waitForTimeout(500);
   const W = { h:12,parapet:1,terrain:'2',roofType:'RCC roof',Vb:44,k1:1,k2:1,k3:1,k4:1,Kd:.9,Ka:1,Kc:1,cUpF:1,cUpE:1.5,cDn:.8,cLong:0.05,modKg:27.5,strKn:.1,llKn:.5,nPur:2,fy:250,lim:180,pType:'RHS',pb:50,ph:100,pt:3,rType:'RHS',rb:50,rh:120,rt:4,nb:4,tcap:40,vcap:30 };
   await page.evaluate(w => { Object.keys(w).forEach(k => { const e = document.getElementById('epcw_' + k); e.value = w[k]; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); });
     const c = document.getElementById('epcw_survey'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); }, W);
   await page.waitForTimeout(800);
-  check((await page.locator('#epc_tabs [data-t="analysis"]').getAttribute('data-locked')) === null, 'Analysis unlocks once Wind & Structure inputs are complete');
-  check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === '1', 'Drawings stay locked until the analysis is done');
+  check((await page.evaluate(t => !!window.EPCWind.gate(t), 'analysis')) === false, 'Analysis unlocks once Wind & Structure inputs are complete');
+  check((await page.evaluate(t => !!window.EPCWind.gate(t), 'draw')) === true, 'Drawings stay locked until the analysis is done');
   await page.locator('#epc_tabs [data-t="analysis"]').click();
   check(await page.locator('#epc_p-analysis').isVisible(), 'Analysis tab opens');
   check((await page.locator('#epca2_out').innerText()).includes('Not analysed yet'), 'Analysis asks for the missing inputs first');
@@ -74,8 +74,8 @@ try {
   check(!/section is slender/i.test(thinTxt) && /Thin-wall box sections/.test(thinTxt) && /PASSES/.test(thinTxt), 'Thin-wall box sections use effective width, are not rejected as slender, and the block passes');
   const st = await page.evaluate(() => window.EPCAnalysis.status().state);
   console.log('analysis state:', st);
-  if (st === 'pass') check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === null, 'Drawings unlock when the analysis passes');
-  else check((await page.locator('#epc_tabs [data-t="draw"]').getAttribute('data-locked')) === '1', 'Drawings stay locked when the analysis fails');
+  if (st === 'pass') check((await page.evaluate(t => !!window.EPCWind.gate(t), 'draw')) === false, 'Drawings unlock when the analysis passes');
+  else check((await page.evaluate(t => !!window.EPCWind.gate(t), 'draw')) === true, 'Drawings stay locked when the analysis fails');
   const p2 = await page.evaluate(() => { const r = window.EPCAnalysis.result(); return r && r.p2 ? { amp: r.p2.amp, err: r.p2.errors.length, n: Object.keys(r.cres2).length } : null; });
   check(p2 && p2.n === 8 && p2.err === 0 && p2.amp >= 1 && p2.amp < 1.5, 'Second-order (P-Δ) results exist for all eight ultimate combinations: ' + JSON.stringify(p2));
   check((await page.locator('#epca2_out').innerText()).includes('Second-order (P-Δ) analysis of the eight ultimate combinations'), 'The Analysis tab reports the P-Δ amplification');
@@ -85,7 +85,7 @@ try {
   check(std && /\.std$/.test(std.name) && /^STAAD SPACE /.test(std.text) && /SET Z UP/.test(std.text) && /PERFORM ANALYSIS\nFINISH\n$/.test(std.text) && (std.text.match(/LOAD COMBINATION/g) || []).length === 13, 'STAAD file is generated for the block: ' + (std && std.name));
   // ---- Fabrication BOM, built from the analysed pieces ----
   check(st === 'pass', 'Analysis passes for every block before the BOM checks');
-  check((await page.locator('#epc_tabs [data-t="bom"]').getAttribute('data-locked')) === null, 'BOM unlocks when the analysis passes for every block');
+  check((await page.evaluate(t => !!window.EPCWind.gate(t), 'bom')) === false, 'BOM unlocks when the analysis passes for every block');
   await page.locator('#epc_tabs [data-t="bom"]').click(); await page.waitForTimeout(500);
   check(await page.locator('#epc_p-bom').isVisible() && await page.locator('#epcb').count() === 1, 'BOM tab opens with the fabrication BOM');
   check(await page.evaluate(() => document.getElementById('epc_p-bom').firstElementChild.id === 'epcb'), 'Fabrication BOM sits above the Layout cut list');
@@ -137,13 +137,13 @@ try {
   await page.evaluate(() => { const b = document.getElementById('epca2_blk'); b.value = '2'; b.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.evaluate(() => { const e = document.getElementById('epc_bl0'); e.value = '12000'; e.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.waitForTimeout(1500);
-  const g2 = await page.evaluate(() => { const a = window.EPCAnalysis.status(), t = id => document.querySelector('#epc_tabs [data-t="' + id + '"]').getAttribute('data-locked'); return { state: a.state, fails: (a.fails || []).join(' | '), blocks: (a.blocks || []).map(b => b.name + ':' + b.state).join(', '), bom: t('bom'), draw: t('draw'), shown: window.EPCAnalysis.result().c.b.name }; });
+  const g2 = await page.evaluate(() => { const a = window.EPCAnalysis.status(), t = id => window.EPCWind.gate(id) ? '1' : null; return { state: a.state, fails: (a.fails || []).join(' | '), blocks: (a.blocks || []).map(b => b.name + ':' + b.state).join(', '), bom: t('bom'), draw: t('draw'), shown: window.EPCAnalysis.result().c.b.name }; });
   console.log('one tall block:', JSON.stringify(g2).slice(0, 400));
   check(g2.state === 'fail' && /Main front/.test(g2.fails) && /Tower roof:pass/.test(g2.blocks), 'A failing block fails the whole analysis (' + g2.blocks + ')');
   check(g2.shown === 'Tower roof' && g2.bom === '1' && g2.draw === '1', 'BOM and Drawings lock while any block fails, although the block on screen (' + g2.shown + ') passes');
   await page.evaluate(() => { const e = document.getElementById('epc_bl0'); e.value = '1590'; e.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.waitForTimeout(1500);
-  check((await page.evaluate(() => window.EPCAnalysis.status().state)) === 'pass' && (await page.locator('#epc_tabs [data-t="bom"]').getAttribute('data-locked')) === null, 'Everything unlocks again once every block passes');
+  check((await page.evaluate(() => window.EPCAnalysis.status().state)) === 'pass' && (await page.evaluate(t => !!window.EPCWind.gate(t), 'bom')) === false, 'Everything unlocks again once every block passes');
   // Column tie default is the drawn 0.6; a 0.75 saved by the old default is replaced once, a 0.75 saved after this revision is kept
   for (const [rev, want] of [[undefined, '0.6'], [2, '0.75']]) {
     const p2 = await browser.newPage({ viewport: { width: 390, height: 844 } });

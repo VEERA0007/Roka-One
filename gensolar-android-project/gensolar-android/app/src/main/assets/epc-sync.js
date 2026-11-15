@@ -154,11 +154,11 @@
     var W=window.EPCWind&&window.EPCWind.status();
     if(W&&W.state==='pass'){chips.push(['Wind / structure','pass (prelim.)','pd '+(W.pd*1000).toFixed(0)+' N/m²']);add('ok','Wind and structure checks pass for the entered values (preliminary). Pressure '+(W.pd*1000).toFixed(0)+' N/m², purlin '+W.pur.maxUtil.toFixed(2)+', rafter '+W.raf.maxUtil.toFixed(2)+', anchors '+W.anc.util.toFixed(2)+'.')}
     else if(W&&W.state==='fail'){chips.push(['Wind / structure','FAIL']);add('err','Wind and structure checks fail: '+W.fails.join('; ')+'.')}
-    else add('warn','Wind and structure inputs are incomplete, so Drawings, Electrical, BOM and Documents stay locked.');
+    else add('warn','Wind and structure inputs are incomplete, so Drawings, Electrical, BOM and Documents are not ready.');
     var AN=window.EPCAnalysis&&window.EPCAnalysis.status();
     if(AN&&AN.state==='pass'){chips.push(['3D frame analysis','pass (prelim.)']);add('ok','3D frame analysis passes for all IS 800 combinations in every block (preliminary).')}
     else if(AN&&AN.state==='fail'){chips.push(['3D frame analysis','FAIL']);add('err','3D frame analysis fails: '+AN.fails.slice(0,4).join('; ')+(AN.fails.length>4?' and '+(AN.fails.length-4)+' more':'')+'.')}
-    else if(W&&W.state!=='missing')add('warn','The 3D frame analysis inputs are incomplete, so Drawings, Electrical, BOM and Documents stay locked.');
+    else if(W&&W.state!=='missing')add('warn','The 3D frame analysis inputs are incomplete, so Drawings, Electrical, BOM and Documents are not ready.');
     /* The Layout material list uses its own pipe weights; the fabrication BOM uses the sections that were analysed. Say so when they differ. */
     var EB=window.EPCBom,AR=window.EPCAnalysis&&window.EPCAnalysis.runs&&window.EPCAnalysis.runs(),r0=null;
     if(AR)AR.forEach(function(r){if(r&&!r0)r0=r});
