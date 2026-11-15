@@ -142,6 +142,28 @@
      .catch(function(){say('Could not read the map (offline?). Type the usable roof area from your survey.',true)});
   }
 
+
+  /* ---------- live wind cross-check (epc-livewind.js) ---------- */
+  function liveWind(){
+    var o=$('epcd_live'),lat=parseFloat($('epcd_lat').value),lon=parseFloat($('epcd_lon').value);
+    if(!o)return;
+    if(!(lat>=6&&lat<=37.5&&lon>=68&&lon<=98)){o.innerHTML='<div class="meta" style="color:var(--danger,#b3261e)">Enter the latitude and longitude first (or use Find place).</div>';return}
+    if(!window.EPCLiveWind){o.textContent='Live wind module not loaded.';return}
+    o.innerHTML='<div class="meta">Reading 25 years of daily wind gusts for this latitude and longitude…</div>';
+    var vbIn=parseFloat($('epcd_vbIn').value),W=isFinite(vbIn)&&vbIn>0?{vb:vbIn,note:'entered by you'}:A.windSpeed(lat,lon);
+    window.EPCLiveWind.fetchData(lat,lon).then(function(a){
+      if(a.state!=='ok'){o.innerHTML='<div class="meta" style="color:var(--danger,#b3261e)">'+esc(a.msg)+'</div>';return}
+      var d=a.dirs,mx=Math.max.apply(null,a.annual.map(function(x){return x[1]}));
+      var bars=a.annual.map(function(x){return '<div title="'+x[0]+': '+x[1].toFixed(1)+' m/s" style="flex:1;min-width:3px;background:#0a6b4f;height:'+Math.max(2,Math.round(x[1]/mx*60))+'px"></div>'}).join('');
+      var dir=d?'Strongest '+d.n+' days came mostly from the <b>'+d.top+'</b> ('+d.names.map(function(n,i){return n+' '+d.counts[i]}).join(', ')+').':'';
+      o.innerHTML='<div class="panel" style="margin-top:10px"><b>Live wind check at '+lat.toFixed(4)+'°N, '+lon.toFixed(4)+'°E</b><div class="meta" style="margin:4px 0">Open-Meteo archive (ERA5 reanalysis), '+a.from+' to '+a.to+' ('+a.years+' complete years), gusts at 10 m.</div>'+
+        '<div style="display:flex;gap:2px;align-items:flex-end;height:64px" role="img" aria-label="Highest daily gust in each year">'+bars+'</div>'+
+        '<table style="font-size:13px;margin-top:6px"><tbody><tr><td>Highest gust in the record</td><td align="right"><b>'+a.maxObserved.toFixed(1)+' m/s</b> ('+esc(a.maxDate)+')</td></tr><tr><td>Average yearly maximum</td><td align="right">'+a.meanAnnualMax.toFixed(1)+' m/s</td></tr><tr><td>Estimated 50-year gust</td><td align="right"><b>'+a.gust50.toFixed(1)+' m/s</b></td></tr><tr><td>Basic wind speed in use</td><td align="right">'+W.vb+' m/s ('+(isFinite(vbIn)&&vbIn>0?'entered by you':'city table, estimate')+')</td></tr></tbody></table>'+
+        '<p style="font-size:12.5px;margin:6px 0">'+dir+'</p><p style="font-size:12.5px;margin:6px 0">'+esc(window.EPCLiveWind.compare(a,W.vb))+'</p>'+
+        '<p class="meta">Cross-check only. The model averages over about 9 km, so it reads lower than a real 3-second gust, and it is not IS 875 (Part 3) Vb. Nothing here is written into the design: type your confirmed Vb in the optional field above.</p></div>';
+    }).catch(function(e){o.innerHTML='<div class="meta" style="color:var(--danger,#b3261e)">Could not read the wind service ('+esc(String(e.message||e))+'). Check the network and try again; the design is not affected.</div>'});
+  }
+
   /* ---------- fill and size ---------- */
   function wait(ms){return new Promise(function(r){setTimeout(r,ms)})}
   function collect(){
@@ -264,7 +286,7 @@
     IN.forEach(function(f){
       if(f[2]==='sel')h+='<div class="field"><label for="epcd_'+f[0]+'">'+f[1]+'</label><select id="epcd_'+f[0]+'">'+f[3].map(function(o){return '<option>'+o+'</option>'}).join('')+'</select></div>';
       else h+='<div class="field"><label for="epcd_'+f[0]+'">'+f[1]+'</label><input id="epcd_'+f[0]+'" type="'+f[2]+'"'+(f[2]==='number'?' step="any" min="0"':'')+(f[4]?' placeholder="e.g. '+f[4]+'"':'')+'></div>'});
-    h+='</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" type="button" id="epcd_find">Find place</button><button class="btn" type="button" id="epcd_roof">Get roof outline from map</button><button class="btn" type="button" id="epcd_drw">Upload / trace the roof drawing</button><button class="btn primary" type="button" id="epcd_go">Auto-design</button></div><div class="meta" id="epcd_msg" aria-live="polite" style="margin-top:8px"></div><div id="epcd_out" aria-live="polite"></div></div>';
+    h+='</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" type="button" id="epcd_find">Find place</button><button class="btn" type="button" id="epcd_roof">Get roof outline from map</button><button class="btn" type="button" id="epcd_live_go">Check wind with live data</button><button class="btn" type="button" id="epcd_drw">Upload / trace the roof drawing</button><button class="btn primary" type="button" id="epcd_go">Auto-design</button></div><div class="meta" id="epcd_msg" aria-live="polite" style="margin-top:8px"></div><div id="epcd_live" aria-live="polite"></div><div id="epcd_out" aria-live="polite"></div></div>';
     sec.innerHTML=h;host.parentNode.insertBefore(sec,host);
     var b=document.createElement('button');b.className='tab';b.setAttribute('role','tab');b.setAttribute('data-t','design');b.textContent='Design';tabs.insertBefore(b,tabs.firstChild);
     var DETAIL=['site','survey','autodesign','layout','wind','analysis','elec'];
@@ -280,7 +302,7 @@
     if(!adv){b.click()}else{sec.hidden=true}
     load();IN.forEach(function(f){var e=$('epcd_'+f[0]);if(e&&st.vals[f[0]]!==undefined)e.value=st.vals[f[0]]});
     sec.addEventListener('input',save);
-    $('epcd_find').onclick=findPlace;$('epcd_roof').onclick=getRoof;$('epcd_go').onclick=solve;
+    $('epcd_find').onclick=findPlace;$('epcd_live_go').onclick=liveWind;$('epcd_roof').onclick=getRoof;$('epcd_go').onclick=solve;
     $('epcd_drw').onclick=function(){mode(true);var s=tabs.querySelector('[data-t="survey"]');if(s)s.click()};
     return true;
   }
