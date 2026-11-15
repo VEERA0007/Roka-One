@@ -101,6 +101,10 @@ try {
   check(csvT && csvT.split('\n')[0].startsWith('month,') && csvT.split('\n').length > 100, 'Hourly CSV is produced: ' + (csvT ? csvT.split('\n').length : 0) + ' lines');
   await page.locator('#epcv_shfac').click(); await page.waitForTimeout(200);
   check((await page.evaluate(() => window.__lastShadeCsv.name)) === 'near-shading-factor-table.csv', 'Factor table CSV is produced');
+  await page.locator('#epcv_shdae').click(); await page.waitForTimeout(200);
+  const daeT = await page.evaluate(() => window.__lastShadeCsv.name + '\u0000' + window.__lastShadeCsv.text);
+  const dparsed = await page.evaluate(t => { const d = new DOMParser().parseFromString(t.split('\u0000')[1], 'application/xml'); return { err: d.getElementsByTagName('parsererror').length, geoms: d.getElementsByTagName('geometry').length }; }, daeT);
+  check(daeT.startsWith('gensolar-scene.dae') && dparsed.err === 0 && dparsed.geoms >= sh.mods, 'COLLADA scene downloads and parses as XML: ' + dparsed.geoms + ' geometries');
   /* PDF package */
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });
   await page.locator('#epcv_pkg').scrollIntoViewIfNeeded(); await page.locator('#epcv_pkg').click(); await page.waitForTimeout(1200);

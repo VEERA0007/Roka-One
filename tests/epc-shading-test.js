@@ -57,4 +57,12 @@ ok('CSV azimuth uses the PVsyst convention (south 0)',csv.slice(1).every(l=>{con
 const ft=H.factorTable(res,wi,SV,{azStep:30,hStep:15});ok('factor table has 13 azimuths x 7 heights and values within 0..1',ft.az.length===13&&ft.h.length===7&&ft.factor.every(r=>r.every(x=>x>=0&&x<=1)));
 const ft0=H.factorTable(SV.calc(base),base,SV,{azStep:30,hStep:15});ok('no obstacle and single rows: factor 1 everywhere',ft0.factor.every(r=>r.every(x=>x===1)));
 ok('table CSV header and size',H.csvFactor(ft,17.4).split('\n').filter(l=>l&&l[0]!=='#').length===1+ft.az.length);
+/* 6. COLLADA scene for PVsyst */
+const dae=H.daeScene(rm,SV,'Test & <site>'),nm=(dae.match(/<geometry /g)||[]).length;
+ok('DAE has one geometry per module and obstacle',nm===smm.modules+rm.obstacles.filter(o=>o.h>0).length,nm);
+ok('DAE declares metres and Z up, and tags are balanced',/<unit name="meter" meter="1"\/>/.test(dae)&&/<up_axis>Z_UP<\/up_axis>/.test(dae)&&['COLLADA','geometry','mesh','triangles','node'].every(t=>(dae.match(new RegExp('<'+t+'[ >]','g'))||[]).length===(dae.match(new RegExp('</'+t+'>','g'))||[]).length),'');
+ok('DAE name is sanitised',!/Test & </.test(dae)&&dae.includes('name="Test  site"')||dae.includes('name="Test site"'));
+const sample=dae.match(/<float_array id="mod0-pa" count="12">([^<]*)</);const v=sample&&sample[1].trim().split(/\s+/).map(Number);
+ok('first module has 4 finite vertices',v&&v.length===12&&v.every(isFinite),v&&v.length);
+ok('every triangle index is inside its vertex list',[...dae.matchAll(/<geometry [^>]*><mesh><source[^>]*><float_array[^>]*count="(\d+)">[^<]*<\/float_array>[\s\S]*?<p>([^<]*)<\/p>/g)].every(m=>Math.max(...m[2].trim().split(/\s+/).map(Number))<+m[1]/3));
 console.log(fail?'FAILED '+fail:'all passed');process.exit(fail?1:0);
