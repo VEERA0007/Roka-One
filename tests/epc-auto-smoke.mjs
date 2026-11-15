@@ -57,6 +57,14 @@ try {
   check(await page.locator('#epc_tabs [data-t="wind"]').isVisible(), 'Review details shows every tab');
   await page.locator('#epcd_adv').click(); await page.waitForTimeout(200);
   check(!(await page.locator('#epc_tabs [data-t="wind"]').isVisible()), 'Back to guided hides them again');
+  /* live wind cross-check with a simulated Open-Meteo answer (25 years; one very strong year) */
+  await page.route('**/archive-api.open-meteo.com/**', r => { const time = [], g = [], d = []; for (let y = 2000; y < 2025; y++) for (let k = 0; k < 365; k++) { time.push(new Date(Date.UTC(y, 0, 1 + k)).toISOString().slice(0, 10)); g.push(k === 100 ? 20 + (y % 5) * 2 + (y === 2010 ? 30 : 0) : 6 + (k % 5)); d.push(k === 100 ? 250 : 80); } r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ daily: { time, wind_gusts_10m_max: g, wind_direction_10m_dominant: d } }) }); });
+  await page.locator('#epc_tabs [data-t="design"]').click(); await page.waitForTimeout(300);
+  await page.locator('#epcd_live_go').click();
+  await page.waitForFunction(() => /Estimated 50-year gust/.test(document.getElementById('epcd_live').textContent), null, { timeout: 15000 });
+  const lw = await page.locator('#epcd_live').innerText();
+  check(lw.includes('25 complete years') && lw.includes('Highest gust in the record') && lw.includes('50.0 m/s') && lw.includes('Cross-check only') && /WARNING|does not confirm/.test(lw), 'Live wind check shows the record, the 50-year gust and the cross-check wording');
+  check(await page.evaluate(() => document.getElementById('epcw_Vb').value) === '44', 'The live check does not change the design Vb');
   /* confirmed Vb overrides the city table */
   await page.locator('#epc_tabs [data-t="design"]').click(); await page.waitForTimeout(300);
   await fill('epcd_vbIn', '41'); await page.locator('#epcd_go').click();
