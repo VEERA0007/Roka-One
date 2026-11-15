@@ -6,11 +6,13 @@ on:
     paths:
       - "gensolar-android-project/gensolar-android/app/src/main/assets/**"
       - "tests/gensolar-webview-smoke.mjs"
+      - "tests/solar-tools-test.js"
       - ".github/workflows/android-ui-smoke.yml"
   pull_request:
     paths:
       - "gensolar-android-project/gensolar-android/app/src/main/assets/**"
       - "tests/gensolar-webview-smoke.mjs"
+      - "tests/solar-tools-test.js"
       - ".github/workflows/android-ui-smoke.yml"
   workflow_dispatch:
 
@@ -33,4 +35,5 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Run GenSolar mobile WebView page smoke tests
         run: |
+          node tests/solar-tools-test.js
           node tests/gensolar-webview-smoke.mjs
