@@ -110,7 +110,8 @@
    ['kw','Target capacity (kWp)','number','','21.26'],['wp','Module rating (Wp)','number','','550'],
    ['ml','Module length (mm)','number','','2278'],['mw','Module width (mm)','number','','1134'],['mkg','Module weight (kg)','number','','27.5'],
    ['roofType','Roof type','sel',['RCC roof','Metal shed roof'],''],['h','Building height to roof (m)','number','','12'],
-   ['roofSqft','Usable roof area (sq ft)','number','','']
+   ['roofSqft','Usable roof area (sq ft)','number','',''],
+   ['vbIn','Basic wind speed Vb (m/s), optional: your confirmed IS 875-3 value','number','','']
   ];
   var st={vals:{},res:null,busy:false};
   function load(){try{st.vals=JSON.parse(lsGet(KEY))||{}}catch(e){st.vals={}}}
@@ -151,11 +152,12 @@
     if(!(v.lon>=68&&v.lon<=98))miss.push('longitude (inside India)');
     if(!(v.kw>0))miss.push('target capacity');if(!(v.wp>=100))miss.push('module rating');
     if(!(v.ml>=500&&v.mw>=500))miss.push('module length and width');if(!(v.mkg>0))miss.push('module weight');
+    if(v.vbIn!==undefined&&isFinite(v.vbIn)&&!(v.vbIn>=20&&v.vbIn<=60))miss.push('basic wind speed between 20 and 60 m/s (or leave it empty)');
     if(!(v.h>0))miss.push('building height');if(!(v.roofSqft>0))miss.push('usable roof area (type it or use the map button)');
     return {v:v,miss:miss};
   }
   function fillPlan(v){
-    var rc=v.roofType==='RCC roof',W=A.windSpeed(v.lat,v.lon),tilt=A.tiltFor(v.lat),terrain='2',k=A.k2(v.h+1,+terrain),warn=[];
+    var rc=v.roofType==='RCC roof',W=isFinite(v.vbIn)&&v.vbIn>0?{vb:v.vbIn,city:'entered',km:null,entered:true,note:'Entered by you.'}:A.windSpeed(v.lat,v.lon),tilt=A.tiltFor(v.lat),terrain='2',k=A.k2(v.h+1,+terrain),warn=[];
     if(!isFinite(k))warn.push('Building height is above 50 m: k2 is outside the table. Not filled.');
     var low=rc?600:500,bl=A.blocks(v.kw,v.wp,2,low,14),gap=20,fsp=Math.round(2*(v.mw+gap)/10)*10,
         rp=2*(v.ml+gap)*Math.cos(tilt*Math.PI/180),csp=Math.max(1500,Math.min(3000,Math.round(rp/2/10)*10));
@@ -236,7 +238,7 @@
     var o=$('epcd_out');if(!o||!st.res)return;var r=st.res,p=r.p,f=r.fin,pass=!f.failed&&f.r.state==='pass',s=f.sel;
     var rows=[['Array tilt / azimuth',p.tilt+'° / 180° (south)','auto'],
       ['Modules / blocks',p.blocks.modules+' modules ('+p.blocks.list.map(function(b){return b.rows+'×'+b.perRow}).join(', ')+') = '+(p.blocks.modules*r.v.wp/1000).toFixed(2)+' kWp','auto'],
-      ['Basic wind speed Vb',p.W.vb+' m/s. '+p.W.note,'estimate: confirm'],
+      ['Basic wind speed Vb',p.W.vb+' m/s. '+p.W.note+(p.W.entered?'':' Published summaries of the Appendix A table disagree for some cities, so type your confirmed value in the optional Vb field.'),p.W.entered?'entered by you':'estimate: confirm'],
       ['Terrain / k2 / other factors','Category '+p.terrain+', k2 '+(isFinite(p.k2)?p.k2.toFixed(2):'–')+', k1 1, k3 1, k4 1, Kd 0.9, Ka 1, Kc 1','estimate: confirm'],
       ['Pressure coefficients','uplift 1.0 field / 1.5 edge, down 0.8, along the rows 0.3 (default values, not from a code table)','estimate: confirm'],
       ['Purlin / rafter',secLabel('RHS',s.pur)+' / '+secLabel('RHS',s.raf),'auto-sized'],
