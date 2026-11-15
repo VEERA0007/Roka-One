@@ -158,5 +158,12 @@
   }
   function init(){if(!mount())setTimeout(init,300)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(init,500)});else setTimeout(init,500);
-  window.EPCSheetUI={state:function(){return {M:M,media:media.length,sheet:!!sheetUrl}}};
+  window.EPCSheetUI={state:function(){return {M:M,media:media.length,sheet:!!sheetUrl}},
+    /* material for the PDF package: traced sheet (static SVG), photos and the list of videos of the current floor */
+    pack:function(){
+      var svg=sheetUrl&&M.W>0?stage().replace(' id="epcs_svg"','').replace(/style="[^"]*"/,'style="width:100%;height:auto;background:#fff"'):'';
+      return {floor:M.floor,scaled:M.ppm>0,ppm:M.ppm,svg:svg,
+        photos:media.filter(function(m){return m.kind!=='video'}).map(function(m){return {src:url(m.blob),name:m.name||'',note:m.note||''}}),
+        videos:media.filter(function(m){return m.kind==='video'}).map(function(m){return {name:m.name||'',note:m.note||'',mb:m.blob&&m.blob.size?m.blob.size/1048576:0}})};
+    }};
 })();
