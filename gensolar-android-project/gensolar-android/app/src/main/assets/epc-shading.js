@@ -160,6 +160,25 @@
     ft.az.forEach(function(a,i){L.push(a+','+ft.factor[i].map(function(x){return x.toFixed(4)}).join(','))});
     return L.join('\n')+'\n';
   }
-  window.EPCShading={makeModule:makeModule,sunVec:sunVec,dni:dni,scene:scene,hitsPrism:hitsPrism,hitsModule:hitsModule,shadedFraction:shadedFraction,sunStep:sunStep,analyse:analyse,analyseAsync:analyseAsync,factorTable:factorTable,csvHourly:csvHourly,csvFactor:csvFactor,KLEIN:KLEIN,MDAYS:MDAYS};
+
+  /* COLLADA 1.4.1 scene (metres, Z up, X east, Y north) so PVsyst's Near shadings > Import a 3D scene can do its own shading calculation */
+  function daeScene(res,SV,name){
+    var sc=scene(res,SV,{n:1}),G=[],N=[];
+    function esc(t){return String(t).replace(/[^A-Za-z0-9_ .-]/g,'').trim()||'item'}
+    function geom(id,label,pts,tris){
+      G.push('<geometry id="'+id+'-g" name="'+label+'"><mesh><source id="'+id+'-p"><float_array id="'+id+'-pa" count="'+pts.length*3+'">'+pts.map(function(q){return q[0].toFixed(4)+' '+q[1].toFixed(4)+' '+q[2].toFixed(4)}).join(' ')+'</float_array><technique_common><accessor source="#'+id+'-pa" count="'+pts.length+'" stride="3"><param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/></accessor></technique_common></source><vertices id="'+id+'-v"><input semantic="POSITION" source="#'+id+'-p"/></vertices><triangles count="'+tris.length+'"><input semantic="VERTEX" source="#'+id+'-v" offset="0"/><p>'+tris.map(function(t){return t.join(' ')}).join(' ')+'</p></triangles></mesh></geometry>');
+      N.push('<node id="'+id+'" name="'+label+'"><instance_geometry url="#'+id+'-g"/></node>');
+    }
+    sc.mods.forEach(function(m,i){geom('mod'+i,'Module '+(i+1)+' ('+esc(sc.tabs[m.tab]?sc.tabs[m.tab].name:'')+')',m.P,[[0,1,2],[0,2,3],[0,2,1],[0,3,2]])});
+    sc.obs.forEach(function(o,i){
+      var q=o.poly,k=q.length,pts=[],t=[],j;
+      q.forEach(function(a){pts.push([a[0],a[1],o.base])});q.forEach(function(a){pts.push([a[0],a[1],o.top])});
+      for(j=0;j<k;j++){var a=j,b=(j+1)%k;t.push([a,b,b+k],[a,b+k,a+k],[a,b+k,b],[a,a+k,b+k])}                 /* walls, both faces */
+      for(j=1;j<k-1;j++){t.push([k,k+j,k+j+1],[k,k+j+1,k+j],[0,j,j+1],[0,j+1,j])}                           /* top and bottom, both faces (convex footprint) */
+      geom('obs'+i,esc(o.name||'Obstacle'),pts,t);
+    });
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1"><asset><contributor><authoring_tool>GenSolar Pro</authoring_tool></contributor><unit name="meter" meter="1"/><up_axis>Z_UP</up_axis></asset><library_geometries>'+G.join('')+'</library_geometries><library_visual_scenes><visual_scene id="scene" name="'+esc(name||'GenSolar')+'">'+N.join('')+'</visual_scene></library_visual_scenes><scene><instance_visual_scene url="#scene"/></scene></COLLADA>\n';
+  }
+  window.EPCShading={daeScene:daeScene,makeModule:makeModule,sunVec:sunVec,dni:dni,scene:scene,hitsPrism:hitsPrism,hitsModule:hitsModule,shadedFraction:shadedFraction,sunStep:sunStep,analyse:analyse,analyseAsync:analyseAsync,factorTable:factorTable,csvHourly:csvHourly,csvFactor:csvFactor,KLEIN:KLEIN,MDAYS:MDAYS};
   if(typeof module!=='undefined')module.exports=window.EPCShading;
 })();
