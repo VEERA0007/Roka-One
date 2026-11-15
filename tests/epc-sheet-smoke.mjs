@@ -85,6 +85,12 @@ try {
   const pkg = await page.evaluate(() => { const b = window.EPCSurveyPackage ? window.EPCSurveyPackage() : { html: '', pages: 0 }; const d = document.createElement('div'); d.innerHTML = b.html; return { pages: b.pages, titles: [...d.querySelectorAll('.ep-ph span:nth-child(2)')].map(e => e.textContent), imgs: d.querySelectorAll('img').length, sheetImg: d.querySelectorAll('svg image').length, txt: d.textContent }; });
   check(pkg.titles.includes('Floor sheet with traced areas') && pkg.sheetImg >= 1, 'Package has the traced floor sheet: ' + pkg.titles.join(' | '));
   check(pkg.imgs === 2 && pkg.titles.some(t => t.startsWith('Site photos 1')) && pkg.txt.includes('Site videos') && pkg.txt.includes('5th floor terrace'), 'Package prints both photos, lists the video and names the floor');
+  /* floor count feeds the wind building height */
+  await page.fill('#epcs_nst', '6'); await page.locator('#epcs_nst').dispatchEvent('change'); await page.fill('#epcs_sth', '3.1'); await page.locator('#epcs_sth').dispatchEvent('change');
+  const hres = await page.locator('#epcs_hres').innerText();
+  await page.locator('#epcs_useh').scrollIntoViewIfNeeded(); await page.locator('#epcs_useh').click();
+  const hw = await page.evaluate(() => ({ w: document.getElementById('epcw_h').value, d: document.getElementById('epcd_h') && document.getElementById('epcd_h').value, saved: JSON.parse(localStorage.getItem('gs_epc_sheet_v1') || '{}') }));
+  check(hres.includes('18.60') && hw.w === '18.6' && Object.values(hw.saved).some(o => o.nst === 6 && o.sth === 3.1), 'Storeys x storey height give the roof height for wind (' + hres.slice(0, 40) + '), set in the Wind tab as ' + hw.w + ' m');
   /* removing a photo */
   await page.locator('#epcs_media_list [data-delm]').first().click(); await page.waitForTimeout(500);
   check((await page.evaluate(() => window.EPCSheetUI.state().media)) === 2, 'A photo can be removed');
