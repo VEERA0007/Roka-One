@@ -24,10 +24,10 @@
   function $(id){return document.getElementById(id)}
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
   function proj(){var e=$('engSite');return e&&e.value.trim()?e.value.trim():'(unnamed)'}
-  var kindSel='',M={floor:'',W:0,H:0,ppm:0,cal:null},mode='',pend=[],shape=null,urls=[],sheetUrl='',media=[],timer=null,msg='';
+  var kindSel='',M={floor:'',nst:0,sth:3,W:0,H:0,ppm:0,cal:null},mode='',pend=[],shape=null,urls=[],sheetUrl='',media=[],timer=null,msg='';
   function lsAll(){try{return JSON.parse(localStorage.getItem(KEY))||{}}catch(e){return {}}}
   function save(){var a=lsAll();a[proj()]=M;try{localStorage.setItem(KEY,JSON.stringify(a))}catch(e){}}
-  function load(){var o=lsAll()[proj()];M={floor:'',W:0,H:0,ppm:0,cal:null};if(o)Object.keys(M).forEach(function(k){if(o[k]!==undefined)M[k]=o[k]})}
+  function load(){var o=lsAll()[proj()];M={floor:'',nst:0,sth:3,W:0,H:0,ppm:0,cal:null};if(o)Object.keys(M).forEach(function(k){if(o[k]!==undefined)M[k]=o[k]})}
 
   /* ---------- IndexedDB (sheet image, photos, videos) ---------- */
   var dbp=null;
@@ -83,12 +83,15 @@
       '<input data-note="'+esc(m.id)+'" type="text" placeholder="Note" value="'+esc(m.note||'')+'" style="width:100%;margin-top:4px" aria-label="Note"><button class="btn x" type="button" data-delm="'+esc(m.id)+'" aria-label="Remove">×</button></div>'});
     return h||'<p class="ep-note">No photos or videos for this floor yet.</p>';
   }
+  function hres(){return M.nst>0&&M.sth>0?'Roof level about '+(M.nst*M.sth).toFixed(2)+' m above the ground ('+M.nst+' × '+M.sth+' m). Used for the wind estimate only; the parapet goes in the Wind tab.':'Used for the wind estimate: enter the number of storeys and one storey height.'}
   function draw(){
     var root=$('epcs');if(!root)return;clearUrls();
     var sc=window.scrollY;
     root.innerHTML='<div class="panel" style="margin-bottom:12px"><h3 style="margin:0 0 4px;font-size:16px">Floor sheet, scale and tracing</h3>'+steps()+
       '<div class="epcv-g"><label>1. Which floor / roof is this sheet?<input id="epcs_floor" type="text" placeholder="e.g. 5th floor terrace" value="'+esc(M.floor)+'"></label>'+
       '<label>2. Sheet of this floor (image)<input id="epcs_file" type="file" accept="image/*"'+(M.floor?'':' disabled')+'></label></div>'+
+      '<div class="epcv-g"><label>Storeys from the ground to this roof (G+5 = 6)<input id="epcs_nst" type="number" min="1" step="1" inputmode="numeric" value="'+(M.nst>0?M.nst:'')+'"></label><label>Height of one storey (m)<input id="epcs_sth" type="number" min="2" step="0.05" inputmode="decimal" value="'+M.sth+'"></label></div>'+
+      '<div class="ep-bar"><span class="ep-note" id="epcs_hres">'+hres()+'</span><button class="btn alt sm" type="button" id="epcs_useh"'+(M.nst>0&&M.sth>0?'':' disabled')+'>Use as building height for wind</button></div>'+
       '<p class="ep-note">Heights are measured from the roof of this floor (the datum). A penthouse roof, lift-room roof and tank tops are entered as heights above it.</p>'+
       '<div class="ep-bar"><button class="btn alt sm" type="button" data-tool="scale1"'+(sheetUrl?'':' disabled')+'>3. Set scale</button>'+
       '<button class="btn alt sm" type="button" data-tool="box1"'+(M.ppm>0?'':' disabled')+'>4a. Trace roof area</button><button class="btn alt sm" type="button" data-tool="box1b"'+(M.ppm>0?'':' disabled')+'>4b. Trace box (room, penthouse, shed)</button><button class="btn alt sm" type="button" data-tool="round1"'+(M.ppm>0?'':' disabled')+'>4c. Trace round (tank)</button>'+
@@ -119,6 +122,9 @@
     var t=e.target,id=t.id||'';
     if(t.getAttribute&&t.getAttribute('data-tool')){startTool(t.getAttribute('data-tool'));return}
     if(id==='epcs_setscale'){var real=parseFloat($('epcs_real').value),ppm=SH.setScale(pend[0],pend[1],real);if(!(ppm>0)){say('Enter the real distance (m); the two taps must not be on the same spot.',true);return}M.ppm=ppm;M.cal=[pend[0],pend[1]];save();mode='';pend=[];say('Scale set: '+(real)+' m = '+Math.round(SH.setScale(M.cal[0],M.cal[1],real)*real)+' px. Check one more known dimension after tracing.');draw();return}
+    if(id==='epcs_useh'){var hv=Math.round(M.nst*M.sth*100)/100,ids=['epcw_h','epcd_h'],old=$('epcw_h')?$('epcw_h').value:'';
+      ids.forEach(function(i){var e=$(i);if(e){e.value=hv;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))}});
+      say('Building height set to '+hv+' m for the wind estimate'+(old&&parseFloat(old)!==hv?' (it replaced '+old+' m)':'')+'. Parapet is separate.');return}
     if(id==='epcs_cancel'){shape=null;pend=[];draw();return}
     if(id==='epcs_add'&&shape){
       var nm=$('epcs_name').value.trim()||shape.name,g=shape.g,U=window.EPCSurveyUI;
@@ -134,6 +140,7 @@
   function onChange(e){
     var t=e.target,id=t.id||'';
     if(id==='epcs_floor'){M.floor=t.value.trim();save();load2();return}
+    if(id==='epcs_nst'||id==='epcs_sth'){var nv=parseFloat(t.value);if(id==='epcs_nst')M.nst=nv>0?Math.round(nv):0;else M.sth=nv>=2?nv:3;save();var hr=$('epcs_hres'),ub=$('epcs_useh');if(hr)hr.textContent=hres();if(ub)ub.disabled=!(M.nst>0&&M.sth>0);return}
     if(id==='epcs_file'&&t.files&&t.files[0]){var f=t.files[0];say('Reading the sheet…');
       shrink(f,2200).then(function(r){M.W=r.w;M.H=r.h;M.ppm=0;M.cal=null;save();return put({id:prefix()+'sheet',kind:'sheet',blob:r.blob,t:Date.now()}).then(function(){sheetUrl=url(r.blob);say('Sheet loaded. Next: set the scale from a dimension you know on it.');draw()})}).catch(function(er){say(er.message,true)});return}
     if(id==='epcs_media'&&t.files&&t.files.length){var fs=Array.prototype.slice.call(t.files);say('Saving…');
