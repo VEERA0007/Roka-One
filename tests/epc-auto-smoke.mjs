@@ -57,6 +57,11 @@ try {
   check(await page.locator('#epc_tabs [data-t="wind"]').isVisible(), 'Review details shows every tab');
   await page.locator('#epcd_adv').click(); await page.waitForTimeout(200);
   check(!(await page.locator('#epc_tabs [data-t="wind"]').isVisible()), 'Back to guided hides them again');
+  /* confirmed Vb overrides the city table */
+  await page.locator('#epc_tabs [data-t="design"]').click(); await page.waitForTimeout(300);
+  await fill('epcd_vbIn', '41'); await page.locator('#epcd_go').click();
+  await page.waitForFunction(() => /ESTIMATED DESIGN|NO STANDARD/.test(document.getElementById('epcd_out').textContent) && /41 m\/s\. Entered by you/.test(document.getElementById('epcd_out').textContent), null, { timeout: 120000 });
+  check(await page.evaluate(() => document.getElementById('epcw_Vb').value) === '41' && (await page.locator('#epcd_out').innerText()).includes('entered by you'), 'A typed Vb replaces the city value and is labelled as entered by you');
   check(errors.length === 0, 'No page errors: ' + errors.slice(0, 2).join(' | '));
 } catch (e) { failures.push('Exception: ' + (e.stack || e.message)); }
 await browser.close(); server.close();
