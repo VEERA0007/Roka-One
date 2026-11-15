@@ -71,16 +71,13 @@ try {
   await page.evaluate(() => window.verifyRealOtp());
   await page.waitForTimeout(600);
   check(await page.locator('#app').isVisible(), 'Correct code signs in and opens the app');
-  check((await page.locator('#tabEng').innerText()).trim() === 'EPC' && await page.locator('#tabEng').isVisible(), 'Manager account sees the EPC tab');
+  check(await page.locator('#tabEng').count() === 0, 'EPC is no longer a tab in this app (it is the Solar EPC app)');
   await page.click('#tabLeads');
   await page.waitForTimeout(400);
   check((await page.locator('#view-leads').innerText()).includes('Test lead'), 'Cloud leads load for the manager organization');
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2400);
   check(await page.locator('#app').isVisible(), 'Session is restored after reloading the page');
-  await page.click('#tabEng');
-  await page.waitForTimeout(300);
-  check(await page.locator('#epcRoot').isVisible(), 'EPC tab opens on the website');
   check(errors.length === 0, 'No uncaught JavaScript errors: ' + (errors.join(' | ') || 'none'));
 } finally { await browser.close(); server.close(); }
 if (failures.length) { console.error('FAILED:\n' + failures.join('\n')); process.exit(1); }

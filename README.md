@@ -1,6 +1,8 @@
 # GenSolar Pro
 
-**Solar Engineering • Project Estimation • EPC • CRM**
+**Solar Estimation • DPR • CRM**
+
+> Engineering (EPC) design now lives in its own app, Solar EPC: https://github.com/VEERA0007/Solar-EPC
 
 GenSolar Pro is the unified solar project and customer-management platform from **Genesis Powertronics India Pvt. Ltd.** This repository is the main source of the GenSolar Pro application, its web experience, mobile build configuration, desktop wrapper and automated workflows.
 
