@@ -54,48 +54,13 @@ function init(){
  html+='<details class="dpr-group"><summary>17. Internal workflow and project control (company use)</summary><p class="dpr-hint">Internal section for sales, engineering, procurement, execution, quality and management sign-offs. Keep this section separate from the customer acceptance page.</p><label class="dpr-field"><span>Internal stage checklist, owner, status, date and remarks</span><textarea id="dpr_internalWorkflow" data-dpr rows="14">'+esc(d.internalWorkflow||'Sales lead qualification and commercial handover | Owner / status / date / remarks\nCustomer electricity bills and site information verified | Owner / status / date / remarks\nSite survey, roof measurements, shadow analysis and photographs | Owner / status / date / remarks\nEngineering design, module layout, string sizing and inverter selection reviewed | Owner / status / date / remarks\nStructural design, wind load and roof load review approved | Owner / status / date / remarks\nSLD, cable sizing, protection, earthing and lightning design reviewed | Owner / status / date / remarks\nBOM / BOQ and vendor quotations verified | Owner / status / date / remarks\nCommercial approval, customer PO and payment milestones verified | Owner / status / date / remarks\nDISCOM / CEIG / statutory applications and approvals tracked | Owner / status / date / remarks\nProcurement, incoming inspection and serial number records | Owner / status / date / remarks\nWork permits, PPE, safety induction and installation quality checks | Owner / status / date / remarks\nTesting, commissioning, generation monitoring and punch-list closure | Owner / status / date / remarks\nCustomer training, handover documents and warranty registration | Owner / status / date / remarks\nO&M allocation, service contact and project closure approval | Owner / status / date / remarks')+'</textarea></label></details>';
  page.innerHTML=html;$('dpr_wmMode').value=data().wmMode==='gray'?'gray':'color';
  page.querySelectorAll('[data-dpr]').forEach(function(e){e.addEventListener('input',function(){cover();laterSave()});e.addEventListener('change',function(){cover();laterSave()})});
- var epcName=document.querySelector('[data-k="project.name"]');
- if(epcName){
-  function syncEpcProjectName(){
-   var name=String(epcName.value||'').trim(),target=$('dpr_projectName');
-   if(!name||!target)return;
-   target.value=name;cover();laterSave();
-  }
-  epcName.addEventListener('input',syncEpcProjectName);
-  epcName.addEventListener('change',syncEpcProjectName);
- }
  $('dpr_save').onclick=save;$('dpr_pdf').onclick=function(){save();pdf()};cover();window.addEventListener('resize',fitCover);
- document.addEventListener('click',function(e){var b=e.target.closest('.tabbar button');if(!b)return;if(b.getAttribute('data-tab')==='dpr'){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();['est','leads','profile','engineering','team','crm'].forEach(function(x){var q=$('view-'+x);if(q)q.hidden=true});page.hidden=false;fitCover();nav.querySelectorAll('button').forEach(function(q){q.removeAttribute('aria-current')});btn.setAttribute('aria-current','page');$('hsub').textContent='Detailed Project Report';main.scrollTop=0;return}page.hidden=true},true);
+ document.addEventListener('click',function(e){var b=e.target.closest('.tabbar button');if(!b)return;if(b.getAttribute('data-tab')==='dpr'){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();['est','leads','profile','team','crm','tools'].forEach(function(x){var q=$('view-'+x);if(q)q.hidden=true});page.hidden=false;fitCover();nav.querySelectorAll('button').forEach(function(q){q.removeAttribute('aria-current')});btn.setAttribute('aria-current','page');$('hsub').textContent='Detailed Project Report';main.scrollTop=0;return}page.hidden=true},true);
  var st=document.createElement('style');st.textContent='.dpr-cover{position:relative;max-width:760px;width:100%;margin:0 auto 12px;border:1px solid #dce5df;background:#fff;line-height:0;font-size:10px}.dpr-cvimg{display:block;width:100%;height:auto}.dpr-cvv{position:absolute;width:48%;font:600 1em/1.3 Arial,sans-serif;color:#111;word-break:break-word}.dpr-toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}.dpr-toolbar h1{margin:0}.dpr-toolbar p,.dpr-hint{margin:4px 0;color:var(--muted);font-size:13px}.dpr-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.dpr-wmsel{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:600;color:var(--muted)}.dpr-wmsel select{border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--ink);padding:7px;font:13px var(--font-body)}.dpr-group{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px}.dpr-group summary{font-weight:700;cursor:pointer}.dpr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.dpr-field{display:flex;flex-direction:column;gap:5px;font-size:13px;min-width:0}.dpr-field span{font-weight:600;color:var(--muted)}.dpr-field input,.dpr-field textarea,.dpr-wide{width:100%;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--ink);padding:9px;font:14px var(--font-body)}.dpr-field textarea,.dpr-wide{resize:vertical}.dpr-wide{margin-top:10px;font:12px/1.5 monospace}@media(max-width:650px){.dpr-grid{grid-template-columns:1fr}}';
  document.head.appendChild(st);
 }
 var timer;function laterSave(){clearTimeout(timer);timer=setTimeout(save,900)}
 function cover(){var m={project:'projectName',customer:'customerName',mobile:'mobile',address:'address'};Object.keys(m).forEach(function(k){var e=$('dpr_cv_'+k),f=$('dpr_'+m[k]);if(e)e.textContent=f?f.value:''});var z=$('dpr_cv_size'),c=$('dpr_capacity');if(z)z.textContent=c&&c.value.trim()?c.value.trim()+' kWp':'';fitCover()}
-function importEpc(){
- function read(id){var e=$(id);return e&&String(e.value||'').trim()}
- function readKey(key){var e=document.querySelector('[data-k="'+key+'"]');return e&&String(e.value||'').trim()}
- var map={
-  projectName:readKey('project.name'),
-  customerName:readKey('project.client'),
-  siteName:readKey('project.site')||read('engSite'),
-  state:read('engState'),capacity:read('engCapacity'),moduleTech:read('engPanelTech'),
-  moduleWp:read('engPanelW'),inverterCapacity:read('engInverter'),
-  specificYield:read('engAep'),cuf:read('engCuf'),roofArea:read('engRoof'),
-  tiltAzimuth:(read('engTilt')?read('engTilt')+'° tilt':'')+(read('engAzimuth')?' / '+read('engAzimuth')+'° azimuth':''),
-  moduleQty:''
- };
- var wp=parseFloat(map.moduleWp),kw=parseFloat(map.capacity);
- if(isFinite(wp)&&wp>0&&isFinite(kw)&&kw>0)map.moduleQty=String(Math.ceil(kw*1000/wp));
- var annual=isFinite(kw)&&kw>0&&isFinite(parseFloat(map.specificYield))?kw*parseFloat(map.specificYield):null;
- if(annual!=null)map.annualGeneration=String(Math.round(annual));
- Object.keys(map).forEach(function(k){var b=$('dpr_'+k),v=map[k];if(b&&v!=null&&String(v).trim()!=='')b.value=v});
- var lat=read('engLat'),lon=read('engLon'),co=$('dpr_coordinates');
- if(co&&(lat||lon))co.value=[lat,lon].filter(Boolean).join(', ');
- var ac=$('dpr_acCapacity');if(ac&&map.inverterCapacity)ac.value=map.inverterCapacity;
- var ratio=$('dpr_dcAcRatio'),inv=parseFloat(map.inverterCapacity);
- if(ratio&&isFinite(kw)&&kw>0&&isFinite(inv)&&inv>0)ratio.value=(kw/inv).toFixed(2)+':1';
- cover();save();toast('EPC project, customer, site and design inputs imported. Check calculated values before issuing DPR.');
-}
 function pdf(){
  var print=$('printSheet'),d='<div id="dprPrintRoot">';
  d+='<article class="dpr-print-cover">'+coverHtml({projectName:tv('projectName'),size:nv('capacity')!=null?tv('capacity')+' kWp':'',customerName:tv('customerName'),mobile:tv('mobile'),address:tv('address')},true)+'</article>';
